@@ -1,4 +1,4 @@
-FROM openjdk:21
+FROM eclipse-temurin:21-jdk-alpine
 LABEL author="emreunaldi <emree.unaldi@gmail.com>"
 WORKDIR /api-gateway-service
 ADD target/api-gateway-service-0.0.1-SNAPSHOT.jar .
