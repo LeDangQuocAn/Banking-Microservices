@@ -9,11 +9,6 @@
 #                         • AmazonEKSWorkerNodePolicy
 #                         • AmazonEKS_CNI_Policy
 #                         • AmazonEC2ContainerRegistryReadOnly
-#
-# Principle of least privilege:
-#   Nodes receive READ-ONLY ECR access; they never push images.
-#   All write-capable operations (ECR push, Secrets Manager, S3)
-#   are granted to pods via IRSA roles added in Phase 4, not here.
 # ==============================================================
 
 # ===== EKS Cluster Role =====
@@ -56,7 +51,7 @@ data "aws_iam_policy_document" "eks_node_group_assume_role" {
 
 resource "aws_iam_role" "eks_node_group" {
   name               = "${local.name_prefix}-eks-node-group-role"
-  description        = "Assumed by EKS worker nodes (EC2). Read-only ECR access; all write-capable pod permissions are handled by IRSA roles (Phase 4)."
+  description        = "Assumed by EKS worker nodes (EC2). Read-only ECR access; all write-capable pod permissions are handled by IRSA roles."
   assume_role_policy = data.aws_iam_policy_document.eks_node_group_assume_role.json
 
   tags = { Name = "${local.name_prefix}-eks-node-group-role" }

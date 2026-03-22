@@ -3,7 +3,6 @@
 # ==============================================================
 
 # ===== Identity =====
-
 variable "project" {
   description = "Project name — used to construct resource Name tags and KMS alias prefixes."
   type        = string
@@ -15,7 +14,6 @@ variable "env" {
 }
 
 # ===== Networking (sourced from vpc module outputs) =====
-
 variable "vpc_id" {
   description = "VPC ID into which security groups are deployed."
   type        = string

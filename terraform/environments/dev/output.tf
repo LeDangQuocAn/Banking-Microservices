@@ -53,3 +53,74 @@ output "eks_node_sg_id" {
   description = "Security group ID of EKS worker nodes."
 }
 # === End of Security outputs ===
+
+# === EKS outputs ===
+output "eks_cluster_name" {
+  value       = module.eks.cluster_name
+  description = "Name of the Dev EKS cluster."
+}
+
+output "eks_cluster_endpoint" {
+  value       = module.eks.cluster_endpoint
+  description = "Kubernetes API server endpoint — use with kubectl and the Helm provider."
+}
+
+output "eks_cluster_ca_data" {
+  value       = module.eks.cluster_ca_data
+  description = "Base64-encoded cluster CA certificate."
+  sensitive   = true
+}
+
+output "eks_oidc_provider_arn" {
+  value       = module.eks.oidc_provider_arn
+  description = "OIDC provider ARN — used when creating IRSA trust policies."
+}
+# === End of EKS outputs ===
+
+# === RDS outputs ===
+output "rds_endpoint" {
+  value       = module.rds.db_endpoint
+  description = "RDS PostgreSQL connection endpoint (host:port)."
+}
+
+output "rds_secret_arn" {
+  value       = module.rds.db_secret_arn
+  description = "Secrets Manager ARN for RDS master credentials — grant GetSecretValue to application pods."
+}
+# === End of RDS outputs ===
+
+# === DocumentDB outputs ===
+output "docdb_endpoint" {
+  value       = module.documentdb.cluster_endpoint
+  description = "DocumentDB writer endpoint — used by log-service MongoDB driver."
+}
+
+output "docdb_secret_arn" {
+  value       = module.documentdb.secret_arn
+  description = "Secrets Manager ARN for DocumentDB master credentials."
+}
+# === End of DocumentDB outputs ===
+
+# === ElastiCache outputs ===
+output "redis_primary_endpoint" {
+  value       = module.elasticache.primary_endpoint
+  description = "ElastiCache Redis primary endpoint address."
+}
+
+output "redis_secret_arn" {
+  value       = module.elasticache.secret_arn
+  description = "Secrets Manager ARN for the Redis AUTH token."
+}
+# === End of ElastiCache outputs ===
+
+# === ECR outputs ===
+output "ecr_repository_urls" {
+  value       = module.ecr.repository_urls
+  description = "Map of service name → ECR repository URL. Use as the 'image:' field in Kubernetes Deployment manifests."
+}
+
+output "ecr_registry_id" {
+  value       = module.ecr.registry_id
+  description = "AWS account ID owning the ECR registry — required for 'aws ecr get-login-password'."
+}
+# === End of ECR outputs ===
