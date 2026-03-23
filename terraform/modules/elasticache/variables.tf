@@ -70,3 +70,9 @@ variable "snapshot_retention_limit" {
   type        = number
   default     = 1
 }
+
+variable "secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the secret on destroy."
+  type        = number
+  default     = 0
+}

@@ -75,3 +75,9 @@ variable "deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the secret on destroy."
+  type        = number
+  default     = 0
+}

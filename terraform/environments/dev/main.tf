@@ -4,10 +4,6 @@ resource "random_id" "id" {
 # ===== Create S3 bucket for Terraform state =====
 resource "aws_s3_bucket" "terraform_state" {
   bucket = "devops-terraform-state-${random_id.id.hex}"
-
-  lifecycle {
-    prevent_destroy = true // Remember to remove this before if you're done with your project.
-  }
 }
 
 resource "aws_s3_bucket_versioning" "enabled" {
@@ -165,6 +161,9 @@ module "rds" {
   skip_final_snapshot   = var.rds_skip_final_snapshot
   deletion_protection   = var.rds_deletion_protection
 
+  # Secrets Manager
+  secret_recovery_window_days = var.rds_secret_recovery_window_days
+
   # Security module must be applied first so the CMK and SG exist
   # before the DB instance attempts to use them.
   depends_on = [module.security]
@@ -192,6 +191,9 @@ module "documentdb" {
   instance_class = var.docdb_instance_class
   instance_count = var.docdb_instance_count
 
+  # Secrets Manager
+  secret_recovery_window_days = var.docdb_secret_recovery_window_days
+
   depends_on = [module.security]
 }
 # ===== End of DocumentDB =====
@@ -217,6 +219,9 @@ module "elasticache" {
   node_type       = var.elasticache_node_type
   num_cache_nodes = var.elasticache_num_cache_nodes
 
+  # Secrets Manager
+  secret_recovery_window_days = var.elasticache_secret_recovery_window_days
+
   depends_on = [module.security]
 }
 # ===== End of ElastiCache =====
@@ -236,5 +241,8 @@ module "ecr" {
 
   # Lifecycle
   max_tagged_image_count = var.ecr_max_tagged_image_count
+
+  # Destroy
+  force_delete = var.ecr_force_delete
 }
 # ===== End of ECR =====

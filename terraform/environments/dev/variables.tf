@@ -127,6 +127,12 @@ variable "rds_deletion_protection" {
   type        = bool
   default     = false
 }
+
+variable "rds_secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the RDS secret on destroy. 0 for Dev, 7 for Prod."
+  type        = number
+  default     = 0
+}
 # ===== End of RDS module variables =====
 
 # ===== DocumentDB module variables =====
@@ -145,6 +151,12 @@ variable "docdb_engine_version" {
   description = "DocumentDB engine version (e.g. \"5.0\")."
   type        = string
   default     = "5.0"
+}
+
+variable "docdb_secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the DocumentDB secret on destroy. 0 for Dev, 7 for Prod."
+  type        = number
+  default     = 0
 }
 # ===== End of DocumentDB module variables =====
 
@@ -165,6 +177,12 @@ variable "elasticache_engine_version" {
   type        = string
   default     = "7.1"
 }
+
+variable "elasticache_secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the ElastiCache secret on destroy. 0 for Dev, 7 for Prod."
+  type        = number
+  default     = 0
+}
 # ===== End of ElastiCache module variables ======
 
 # ===== ECR module variables =====
@@ -178,5 +196,11 @@ variable "ecr_max_tagged_image_count" {
   description = "Maximum number of tagged images to retain per ECR repository."
   type        = number
   default     = 10
+}
+
+variable "ecr_force_delete" {
+  description = "If true, Terraform will delete ECR repositories even when they still contain images. Enables terraform destroy for iterative dev/prod cycles. In a real production environment, set this to false to prevent accidental image loss."
+  type        = bool
+  default     = true
 }
 # ===== End of ECR module variables =====

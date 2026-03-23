@@ -13,7 +13,8 @@
 #   • at_rest_encryption_enabled  = true  — storage encrypted with CMK
 #   • transit_encryption_enabled  = true  — TLS for all client connections
 #   • auth_token                          — required when TLS is enabled;
-#     token is generated here and stored in Secrets Manager
+#     token is generated here and stored in Secrets Manager 
+#     since Secrets Manager tightly integrates with ElastiCache.
 #   • AUTH token is marked sensitive by Terraform; state encrypted via S3 CMK
 #   • lifecycle ignore_changes on auth_token prevents Terraform from resetting
 #     a rotated token on the next apply
@@ -66,9 +67,10 @@ resource "aws_secretsmanager_secret" "redis" {
   description = "Redis AUTH token for ${local.name_prefix} ElastiCache cluster."
   kms_key_id  = var.kms_key_arn
 
-  # 0 = immediate deletion on destroy (useful for Dev rebuilds).
-  # Change to 7 in Prod to allow recovery from accidental deletion.
-  recovery_window_in_days = 0
+  # 0   = immediate deletion on destroy (Dev — fast rebuild cycles).
+  # 7   = 7-day recovery window (Prod — allows recovery from accidental destroy).
+  # Set via secret_recovery_window_days in tfvars per environment.
+  recovery_window_in_days = var.secret_recovery_window_days
 
   tags = { Name = "${local.name_prefix}-redis-auth-token" }
 }

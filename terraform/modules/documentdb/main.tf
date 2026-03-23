@@ -18,7 +18,8 @@
 #     CA bundle is available at:
 #     https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
 #   • Password never appears in plan output (random_password.result is
-#     marked sensitive); state is encrypted at rest via the S3 CMK.
+#     marked sensitive); stored securely in Secrets Manager 
+#     since Secrets Manager tightly integrates with DocumentDB.
 #   • lifecycle ignore_changes on master_password prevents Terraform
 #     from resetting an externally rotated password.
 # ==============================================================
@@ -71,9 +72,10 @@ resource "aws_secretsmanager_secret" "docdb" {
   description = "Master credentials for ${local.name_prefix} DocumentDB cluster."
   kms_key_id  = var.kms_key_arn
 
-  # 0 = immediate deletion on destroy (useful for Dev rebuilds).
-  # Change to 7 in Prod to allow recovery from accidental deletion.
-  recovery_window_in_days = 0
+  # 0   = immediate deletion on destroy (Dev — fast rebuild cycles).
+  # 7   = 7-day recovery window (Prod — allows recovery from accidental destroy).
+  # Set via secret_recovery_window_days in tfvars per environment.
+  recovery_window_in_days = var.secret_recovery_window_days
 
   tags = { Name = "${local.name_prefix}-docdb-credentials" }
 }

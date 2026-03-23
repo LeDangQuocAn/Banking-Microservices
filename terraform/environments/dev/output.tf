@@ -8,6 +8,11 @@ output "s3_bucket_arn" {
   value       = aws_s3_bucket.terraform_state.arn
   description = "ARN of the S3 bucket"
 }
+
+output "state_bucket_name" {
+  value       = aws_s3_bucket.terraform_state.bucket
+  description = "Name of the Dev Terraform remote state S3 bucket. Dev owns this bucket exclusively — destroying Dev removes this bucket only."
+}
 # === End of output variables for the S3 bucket ===
 
 # === VPC outputs ===

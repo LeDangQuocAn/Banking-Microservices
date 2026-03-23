@@ -53,3 +53,9 @@ variable "untagged_expiry_days" {
   type        = number
   default     = 1
 }
+
+variable "force_delete" {
+  description = "If true, Terraform will delete ECR repositories even when they still contain images. Set true in both Dev and Prod to enable terraform destroy. NOTE: In a real production environment, set this to false to prevent accidental image loss."
+  type        = bool
+  default     = false
+}
