@@ -30,3 +30,4 @@ replay_pid*
 *.tfvars
 .terraform.lock.hcl
 Overview.md
+Report.md

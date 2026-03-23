@@ -70,8 +70,8 @@ resource "aws_secretsmanager_secret" "rds" {
   description = "Master credentials for ${local.name_prefix} RDS PostgreSQL instance."
   kms_key_id  = var.kms_key_arn
 
-  # 0   = immediate deletion on destroy (Dev — fast rebuild cycles).
-  # 7   = 7-day recovery window (Prod — allows recovery from accidental destroy).
+  # 0 = immediate deletion on destroy (Dev — fast rebuild cycles).
+  # 7 = 7-day recovery window (Prod — allows recovery from accidental destroy).
   # Set via secret_recovery_window_days in tfvars per environment.
   recovery_window_in_days = var.secret_recovery_window_days
 
@@ -104,7 +104,7 @@ resource "aws_db_instance" "main" {
 
   # Storage
   allocated_storage     = var.allocated_storage
-  max_allocated_storage = 100      # autoscaling ceiling; set higher for Prod
+  max_allocated_storage = 100      # autoscaling ceiling
   storage_type          = "gp3"
   storage_encrypted     = true
   kms_key_id            = var.kms_key_arn
