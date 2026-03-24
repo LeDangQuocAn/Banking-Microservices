@@ -23,6 +23,7 @@
 hs_err_pid*
 replay_pid*
 
+<<<<<<< HEAD
 # Terraform
 .terraform/
 *.tfstate
@@ -32,6 +33,13 @@ replay_pid*
 Overview.md
 Report.md
 permission.md
+=======
+# Environment variables - never commit secrets
+.env
+.env.*
+!.env.example
+>>>>>>> 6f7b3bb (Update dockerfile multistage build & docker compose (#1))
+
 
 # Environment variables - never commit secrets
 .env
