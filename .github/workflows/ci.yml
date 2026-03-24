@@ -17,7 +17,7 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_DB: banking-microservices
-          POSTGRES_USER: ${{ secrets['CI_POSTGRES_USER'] || 'postgres' }}
+          POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
         ports:
           - 5432:5432
@@ -38,7 +38,7 @@ jobs:
       rabbitmq:
         image: rabbitmq:3.13-management-alpine
         env:
-          RABBITMQ_DEFAULT_USER: ${{ secrets['CI_RABBITMQ_USER'] || 'admin' }}
+          RABBITMQ_DEFAULT_USER: admin
           RABBITMQ_DEFAULT_PASS: ${{ secrets['CI_RABBITMQ_PASSWORD'] || 'admin38' }}
         ports:
           - 5672:5672
@@ -50,32 +50,27 @@ jobs:
       mongodb:
         image: mongo:7
         env:
-          MONGO_INITDB_ROOT_USERNAME: ${{ secrets['CI_MONGODB_USER'] || 'an' }}
+          MONGO_INITDB_ROOT_USERNAME: an
           MONGO_INITDB_ROOT_PASSWORD: ${{ secrets['CI_MONGODB_PASSWORD'] || 'an123' }}
           MONGO_INITDB_DATABASE: banking-microservices
         ports:
           - 27017:27017
-        options: >-
-          --health-cmd "mongosh --username $${MONGO_INITDB_ROOT_USERNAME} --password $${MONGO_INITDB_ROOT_PASSWORD} --authenticationDatabase admin --eval 'db.adminCommand({ ping: 1 })'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
     env:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
-      POSTGRES_USER: ${{ secrets['CI_POSTGRES_USER'] || 'postgres' }}
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
       REDIS_HOST: localhost
       REDIS_PORT: 6379
       REDIS_DB: 0
       RABBITMQ_HOST: localhost
       RABBITMQ_PORT: 5672
-      RABBITMQ_USER: ${{ secrets['CI_RABBITMQ_USER'] || 'admin' }}
+      RABBITMQ_USER: admin
       RABBITMQ_PASSWORD: ${{ secrets['CI_RABBITMQ_PASSWORD'] || 'admin38' }}
       MONGODB_HOST: localhost
       MONGODB_PORT: 27017
       MONGODB_DB: banking-microservices
-      MONGODB_USER: ${{ secrets['CI_MONGODB_USER'] || 'an' }}
+      MONGODB_USER: an
       MONGODB_PASSWORD: ${{ secrets['CI_MONGODB_PASSWORD'] || 'an123' }}
     strategy:
       fail-fast: false
