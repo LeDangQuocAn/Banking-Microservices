@@ -12,6 +12,53 @@ jobs:
   test-services:
     name: Test ${{ matrix.service }}
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: banking-microservices
+          POSTGRES_USER: ${{ secrets['CI_POSTGRES_USER'] || 'postgres' }}
+          POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d banking-microservices"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: ${{ secrets['CI_RABBITMQ_USER'] || 'admin' }}
+          RABBITMQ_DEFAULT_PASS: ${{ secrets['CI_RABBITMQ_PASSWORD'] || 'admin38' }}
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: ${{ secrets['CI_POSTGRES_USER'] || 'postgres' }}
+      POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      RABBITMQ_HOST: localhost
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: ${{ secrets['CI_RABBITMQ_USER'] || 'admin' }}
+      RABBITMQ_PASSWORD: ${{ secrets['CI_RABBITMQ_PASSWORD'] || 'admin38' }}
     strategy:
       fail-fast: false
       matrix:
