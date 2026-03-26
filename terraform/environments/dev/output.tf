@@ -1,20 +1,3 @@
-# === Output variables for the S3 bucket ===
-output "s3_bucket_id" {
-  value       = aws_s3_bucket.terraform_state.id
-  description = "ID of the S3 bucket"
-}
-
-output "s3_bucket_arn" {
-  value       = aws_s3_bucket.terraform_state.arn
-  description = "ARN of the S3 bucket"
-}
-
-output "state_bucket_name" {
-  value       = aws_s3_bucket.terraform_state.bucket
-  description = "Name of the Dev Terraform remote state S3 bucket. Dev owns this bucket exclusively — destroying Dev removes this bucket only."
-}
-# === End of output variables for the S3 bucket ===
-
 # === VPC outputs ===
 output "vpc_id" {
   value       = module.vpc.vpc_id
@@ -95,14 +78,15 @@ output "rds_secret_arn" {
 # === End of RDS outputs ===
 
 # === DocumentDB outputs ===
+# Returns null when create_documentdb = false (free-tier account toggle).
 output "docdb_endpoint" {
-  value       = module.documentdb.cluster_endpoint
-  description = "DocumentDB writer endpoint — used by log-service MongoDB driver."
+  value       = var.create_documentdb ? module.documentdb[0].cluster_endpoint : null
+  description = "DocumentDB writer endpoint - used by log-service MongoDB driver. null when create_documentdb = false."
 }
 
 output "docdb_secret_arn" {
-  value       = module.documentdb.secret_arn
-  description = "Secrets Manager ARN for DocumentDB master credentials."
+  value       = var.create_documentdb ? module.documentdb[0].secret_arn : null
+  description = "Secrets Manager ARN for DocumentDB master credentials. null when create_documentdb = false."
 }
 # === End of DocumentDB outputs ===
 

@@ -7,7 +7,6 @@
 #   rds         → rds_kms_key_arn, rds_sg_id
 #   documentdb  → documentdb_kms_key_arn, documentdb_sg_id
 #   elasticache → elasticache_kms_key_arn, elasticache_sg_id
-#   root env    → s3_state_kms_key_arn (upgrades S3 SSE in main.tf)
 # ==============================================================
 
 # ===== KMS Key ARNs =====
@@ -29,11 +28,6 @@ output "documentdb_kms_key_arn" {
 output "elasticache_kms_key_arn" {
   description = "ARN of the CMK used for ElastiCache Redis at-rest encryption."
   value       = aws_kms_key.elasticache.arn
-}
-
-output "s3_state_kms_key_arn" {
-  description = "ARN of the CMK used to encrypt the Terraform remote-state S3 bucket. Referenced in the root module to upgrade SSE from aws/s3 to a CMK."
-  value       = aws_kms_key.s3_state.arn
 }
 # ===== End of KMS Key ARNs =====
 

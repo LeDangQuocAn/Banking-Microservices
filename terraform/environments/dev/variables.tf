@@ -158,6 +158,12 @@ variable "docdb_secret_recovery_window_days" {
   type        = number
   default     = 0
 }
+
+variable "create_documentdb" {
+  description = "Set to false to skip DocumentDB cluster creation. Required for free-tier or basic-plan AWS accounts that do not support the DocumentDB engine type (only aurora-postgresql is available on those plans)."
+  type        = bool
+  default     = true
+}
 # ===== End of DocumentDB module variables =====
 
 # ===== ElastiCache module variables =====

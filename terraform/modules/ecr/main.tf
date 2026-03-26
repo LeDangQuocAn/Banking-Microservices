@@ -113,6 +113,9 @@ resource "aws_ecr_repository_policy" "main" {
   for_each   = toset(var.service_names)
   repository = aws_ecr_repository.main[each.key].name
 
+  # ECR repository policies must NOT include "Resource" fields — the
+  # repository itself is the implicit resource. AWS rejects policies that
+  # contain "Resource": "*" with InvalidParameterException.
   policy = jsonencode({
     Version = "2012-10-17"
     Statement = [
@@ -126,8 +129,7 @@ resource "aws_ecr_repository_policy" "main" {
         Principal = {
           AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root"
         }
-        Action   = "ecr:*"
-        Resource = "*"
+        Action = "ecr:*"
       },
       {
         # Explicit Deny for cross-account push operations.
@@ -143,7 +145,6 @@ resource "aws_ecr_repository_policy" "main" {
           "ecr:CompleteLayerUpload",
           "ecr:BatchImportUpstreamImage",
         ]
-        Resource = "*"
         Condition = {
           StringNotEquals = {
             "aws:PrincipalAccount" = data.aws_caller_identity.current.account_id

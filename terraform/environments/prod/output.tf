@@ -1,9 +1,4 @@
-﻿output "state_bucket_name" {
-  value       = aws_s3_bucket.terraform_state.bucket
-  description = "Name of the Prod Terraform remote state S3 bucket. After the first terraform apply, copy this value into prod/backend.tf and run: terraform init -migrate-state"
-}
-
-# === VPC outputs ===
+﻿# === VPC outputs ===
 output "vpc_id" {
   value       = module.vpc.vpc_id
   description = "ID of the Prod VPC."

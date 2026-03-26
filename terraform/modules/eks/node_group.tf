@@ -37,9 +37,15 @@ resource "aws_launch_template" "eks_node" {
     http_put_response_hop_limit = 2          # 1 = host only; 2 = one container hop allowed
   }
 
-  # Additional security group
-  # EKS appends the cluster-managed SG to this list automatically.
-  vpc_security_group_ids = [var.eks_node_sg_id]
+  # Additional security group.
+  # When vpc_security_group_ids is set in a custom launch template, EKS does NOT
+  # automatically attach the cluster security group to the node's network interface.
+  # So it leads to "NodeCreationFailure: Instances failed to join the kubernetes cluster".
+  # Therefore must explicitly include both the custom node SG and the cluster.
+  vpc_security_group_ids = [
+    var.eks_node_sg_id,
+    aws_eks_cluster.main.vpc_config[0].cluster_security_group_id,
+  ]
 
   # Root volume
   block_device_mappings {

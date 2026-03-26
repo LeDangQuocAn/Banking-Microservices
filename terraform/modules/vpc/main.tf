@@ -161,9 +161,10 @@ resource "aws_route_table_association" "private" {
 
 # ===== VPC Endpoints =====
 # S3 Gateway Endpoint — free of charge.
-# Routes S3 traffic from all subnets directly over the AWS backbone,
-# eliminating NAT Gateway data-processing fees for S3 access
-# (Terraform state reads/writes, ECR layer pulls from S3, etc.).
+# Routes S3 traffic from private subnets directly over the AWS backbone,
+# eliminating NAT Gateway data-processing fees for S3 access.
+# Primary use: ECR image pulls — ECR stores layer blobs in S3, so every
+# node image pull bypasses the NAT Gateway and saves ~$0.045/GB.
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${data.aws_region.current.name}.s3"

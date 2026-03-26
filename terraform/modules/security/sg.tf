@@ -29,7 +29,7 @@ resource "aws_security_group" "alb" {
 
 resource "aws_vpc_security_group_ingress_rule" "alb_http" {
   security_group_id = aws_security_group.alb.id
-  description       = "HTTP from internet — required for the ALB HTTP→HTTPS redirect listener."
+  description       = "HTTP from internet - required for the ALB HTTP-to-HTTPS redirect listener."
   from_port         = 80
   to_port           = 80
   ip_protocol       = "tcp"
@@ -47,7 +47,7 @@ resource "aws_vpc_security_group_ingress_rule" "alb_https" {
 
 resource "aws_vpc_security_group_egress_rule" "alb_all_out" {
   security_group_id = aws_security_group.alb.id
-  description       = "All outbound — allows ALB to forward requests to EKS pods on any port."
+  description       = "All outbound - allows ALB to forward requests to EKS pods on any port."
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
 }
@@ -83,14 +83,14 @@ resource "aws_vpc_security_group_ingress_rule" "eks_node_self" {
 
 resource "aws_vpc_security_group_ingress_rule" "eks_node_from_alb" {
   security_group_id            = aws_security_group.eks_node.id
-  description                  = "ALB → pod: AWS Load Balancer Controller forwards to pod IPs on any containerPort (ip target type)."
+  description                  = "ALB to pod: AWS Load Balancer Controller forwards to pod IPs on any containerPort (ip target type)."
   referenced_security_group_id = aws_security_group.alb.id
   ip_protocol                  = "-1"
 }
 
 resource "aws_vpc_security_group_egress_rule" "eks_node_all_out" {
   security_group_id = aws_security_group.eks_node.id
-  description       = "All outbound — needed for ECR image pulls, S3, Secrets Manager, EKS API server, and NAT to internet."
+  description       = "All outbound - needed for ECR image pulls, S3, Secrets Manager, EKS API server, and NAT to internet."
   ip_protocol       = "-1"
   cidr_ipv4         = "0.0.0.0/0"
 }
@@ -99,7 +99,7 @@ resource "aws_vpc_security_group_egress_rule" "eks_node_all_out" {
 # ===== RDS Security Group (PostgreSQL — shared by all Java services) ======
 resource "aws_security_group" "rds" {
   name        = "${local.name_prefix}-rds-sg"
-  description = "RDS PostgreSQL: allows port 5432 inbound from EKS worker nodes only. No egress — databases do not initiate connections."
+  description = "RDS PostgreSQL: allows port 5432 inbound from EKS worker nodes only. No egress - databases do not initiate connections."
   vpc_id      = var.vpc_id
 
   lifecycle { create_before_destroy = true }

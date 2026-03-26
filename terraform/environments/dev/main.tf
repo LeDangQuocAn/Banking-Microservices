@@ -1,72 +1,3 @@
-resource "random_id" "id" {
-  byte_length = 4
-}
-# ===== Create S3 bucket for Terraform state =====
-resource "aws_s3_bucket" "terraform_state" {
-  bucket = "devops-terraform-state-${random_id.id.hex}"
-}
-
-resource "aws_s3_bucket_versioning" "enabled" {
-  bucket = aws_s3_bucket.terraform_state.id
-  versioning_configuration {
-    status = "Enabled"
-  }
-}
-
-resource "aws_s3_bucket_server_side_encryption_configuration" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-
-  rule {
-    apply_server_side_encryption_by_default {
-      sse_algorithm     = "aws:kms"
-      kms_master_key_id = module.security.s3_state_kms_key_arn
-    }
-    bucket_key_enabled = true
-  }
-
-  # The security module must be applied first to provision the CMK.
-  depends_on = [module.security]
-}
-
-resource "aws_s3_bucket_public_access_block" "terraform_state" {
-  bucket = aws_s3_bucket.terraform_state.id
-
-  block_public_acls       = true
-  block_public_policy     = true
-  ignore_public_acls      = true
-  restrict_public_buckets = true
-}
-
-resource "aws_s3_bucket_policy" "terraform_state_enforce_tls" {
-  bucket = aws_s3_bucket.terraform_state.id
-
-  # Must depend on the public-access block; otherwise AWS rejects the policy
-  # when block_public_policy is being applied simultaneously.
-  depends_on = [aws_s3_bucket_public_access_block.terraform_state]
-
-  policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Sid       = "DenyInsecureTransport"
-        Effect    = "Deny"
-        Principal = "*"
-        Action    = "s3:*"
-        Resource = [
-          aws_s3_bucket.terraform_state.arn,
-          "${aws_s3_bucket.terraform_state.arn}/*",
-        ]
-        Condition = {
-          Bool = {
-            "aws:SecureTransport" = "false"
-          }
-        }
-      },
-    ]
-  })
-}
-# ===== End of S3 bucket for Terraform state =====
-
 # ===== Create VPC =====
 module "vpc" {
   source = "../../modules/vpc"
@@ -94,6 +25,10 @@ module "security" {
   # groups are created inside the correct VPC.
   vpc_id   = module.vpc.vpc_id
   vpc_cidr = module.vpc.vpc_cidr
+
+  # 7 days (AWS minimum) — fast cleanup across dev destroy cycles.
+  # Staging pending-deletion keys do not affect re-apply (new keys are always created).
+  kms_key_deletion_window_days = 7
 }
 # ===== End of Security =====
 
@@ -171,7 +106,9 @@ module "rds" {
 # ===== End of RDS =====
 
 # ===== DocumentDB (MongoDB-compatible) =====
+# count = 0 when create_documentdb = false (free-tier accounts — see §16 Issue F).
 module "documentdb" {
+  count  = var.create_documentdb ? 1 : 0
   source = "../../modules/documentdb"
 
   project = "Banking-Microservices"

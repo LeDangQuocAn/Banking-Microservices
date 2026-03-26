@@ -1,8 +1,8 @@
 terraform {
-  backend "s3" {
-    bucket       = "devops-terraform-state-c099bc7a"
-    key          = "dev/terraform.tfstate"
-    region       = "ap-southeast-1"
-    use_lockfile = true
+  cloud {
+    organization = "devsecops-tfstate-microservices"
+    workspaces {
+      name = "banking-ms-dev"
+    }
   }
 }
