@@ -32,3 +32,8 @@ replay_pid*
 Overview.md
 Report.md
 permission.md
+
+# Environment variables - never commit secrets
+.env
+.env.*
+!.env.example
