@@ -8,9 +8,13 @@ on:
     branches:
       - "**"
 
+permissions:
+  contents: read
+  id-token: write
+
 jobs:
   test-services:
-    name: Test ${{ matrix.service }}
+    name: Unit and Context Tests (${{ matrix.service }})
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -106,3 +110,136 @@ jobs:
 
       - name: Run tests
         run: ./mvnw -B test
+
+  integration-compose:
+    name: Integration Smoke Test (Docker Compose)
+    runs-on: ubuntu-latest
+    needs:
+      - test-services
+    env:
+      POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: ${{ secrets['CI_RABBITMQ_PASSWORD'] || 'admin38' }}
+      MONGODB_USER: an
+      MONGODB_PASSWORD: ${{ secrets['CI_MONGODB_PASSWORD'] || 'an123' }}
+      PGADMIN_DEFAULT_EMAIL: ${{ secrets['CI_PGADMIN_EMAIL'] || 'pgadmin@example.com' }}
+      PGADMIN_DEFAULT_PASSWORD: ${{ secrets['CI_PGADMIN_PASSWORD'] || 'admin' }}
+      MONGO_EXPRESS_USER: ${{ secrets['CI_MONGO_EXPRESS_USER'] || 'admin' }}
+      MONGO_EXPRESS_PASSWORD: ${{ secrets['CI_MONGO_EXPRESS_PASSWORD'] || 'admin' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build and start core stack
+        run: |
+          docker compose up -d --build \
+            discovery-client-service \
+            api-gateway-service \
+            user-service \
+            bank-service \
+            credit-card-service \
+            account-service \
+            invoice-service \
+            log-service \
+            postgres-db \
+            redis-db \
+            rabbitmq-log \
+            mongo
+
+      - name: Wait for service health endpoints
+        run: |
+          set -euo pipefail
+
+          check_health() {
+            local url="$1"
+            local name="$2"
+            local retries=60
+            local delay=10
+
+            for i in $(seq 1 "$retries"); do
+              if curl -fsS "$url" > /dev/null; then
+                echo "$name is healthy"
+                return 0
+              fi
+              echo "[$i/$retries] waiting for $name..."
+              sleep "$delay"
+            done
+
+            echo "$name failed to become healthy"
+            docker compose ps
+            return 1
+          }
+
+          check_health "http://localhost:8761/actuator/health" "discovery-client-service"
+          check_health "http://localhost:8087/actuator/health" "api-gateway-service"
+          check_health "http://localhost:8081/actuator/health" "user-service"
+          check_health "http://localhost:8082/actuator/health" "bank-service"
+          check_health "http://localhost:8083/actuator/health" "credit-card-service"
+          check_health "http://localhost:8084/actuator/health" "account-service"
+          check_health "http://localhost:8085/actuator/health" "invoice-service"
+          check_health "http://localhost:8086/actuator/health" "log-service"
+
+      - name: Show running containers
+        if: always()
+        run: docker compose ps
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v
+
+  build-and-push-ecr:
+    name: Build and Push Image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    needs:
+      - integration-compose
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - account-service
+          - api-gateway-service
+          - bank-service
+          - credit-card-service
+          - discovery-client-service
+          - invoice-service
+          - log-service
+          - user-service
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ECR_OIDC }}
+          role-session-name: github-actions-ecr
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Ensure ECR repository exists
+        env:
+          REPOSITORY_NAME: ${{ format('{0}-{1}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', matrix.service) }}
+        run: |
+          aws ecr describe-repositories --repository-names "$REPOSITORY_NAME" >/dev/null 2>&1 || \
+          aws ecr create-repository --repository-name "$REPOSITORY_NAME" >/dev/null
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.service }}
+          file: ${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ format('{0}-{1}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', matrix.service) }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ format('{0}-{1}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', matrix.service) }}:latest
