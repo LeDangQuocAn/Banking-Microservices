@@ -196,7 +196,8 @@ jobs:
     runs-on: ubuntu-latest
     needs:
       - integration-compose
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    ## Temp test on branch feature/cicd-pipeline only, will adjust to main after verification
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline'
     strategy:
       fail-fast: false
       matrix:
