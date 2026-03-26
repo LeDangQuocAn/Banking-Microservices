@@ -23,6 +23,16 @@
 hs_err_pid*
 replay_pid*
 
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.terraform.lock.hcl
+Overview.md
+Report.md
+permission.md
+
 # Environment variables - never commit secrets
 .env
 .env.*
