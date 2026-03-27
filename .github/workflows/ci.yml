@@ -13,9 +13,80 @@ permissions:
   id-token: write
 
 jobs:
+  detect-changes:
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    outputs:
+      services_matrix: ${{ steps.set-matrix.outputs.services_matrix }}
+      any_service_changed: ${{ steps.set-matrix.outputs.any_service_changed }}
+      integration_required: ${{ steps.set-matrix.outputs.integration_required }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            account-service:
+              - 'account-service/**'
+            api-gateway-service:
+              - 'api-gateway-service/**'
+            bank-service:
+              - 'bank-service/**'
+            credit-card-service:
+              - 'credit-card-service/**'
+            discovery-client-service:
+              - 'discovery-client-service/**'
+            invoice-service:
+              - 'invoice-service/**'
+            log-service:
+              - 'log-service/**'
+            user-service:
+              - 'user-service/**'
+            integration:
+              - 'docker-compose.yml'
+              - '.github/workflows/ci.yml'
+
+      - name: Build dynamic matrix
+        id: set-matrix
+        run: |
+          set -euo pipefail
+
+          services=()
+
+          [[ "${{ steps.changes.outputs.account-service }}" == "true" ]] && services+=("account-service")
+          [[ "${{ steps.changes.outputs.api-gateway-service }}" == "true" ]] && services+=("api-gateway-service")
+          [[ "${{ steps.changes.outputs.bank-service }}" == "true" ]] && services+=("bank-service")
+          [[ "${{ steps.changes.outputs.credit-card-service }}" == "true" ]] && services+=("credit-card-service")
+          [[ "${{ steps.changes.outputs.discovery-client-service }}" == "true" ]] && services+=("discovery-client-service")
+          [[ "${{ steps.changes.outputs.invoice-service }}" == "true" ]] && services+=("invoice-service")
+          [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
+          [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
+
+          if [[ ${#services[@]} -eq 0 ]]; then
+            echo "services_matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "any_service_changed=false" >> "$GITHUB_OUTPUT"
+            if [[ "${{ steps.changes.outputs.integration }}" == "true" ]]; then
+              echo "integration_required=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "integration_required=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
+          echo "services_matrix=$matrix_json" >> "$GITHUB_OUTPUT"
+          echo "any_service_changed=true" >> "$GITHUB_OUTPUT"
+          echo "integration_required=true" >> "$GITHUB_OUTPUT"
+
   test-services:
     name: Unit and Context Tests (${{ matrix.service }})
     runs-on: ubuntu-latest
+    needs:
+      - detect-changes
+    if: needs.detect-changes.outputs.any_service_changed == 'true'
     services:
       postgres:
         image: postgres:16-alpine
@@ -79,15 +150,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - account-service
-          - api-gateway-service
-          - bank-service
-          - credit-card-service
-          - discovery-client-service
-          - invoice-service
-          - log-service
-          - user-service
+        service: ${{ fromJson(needs.detect-changes.outputs.services_matrix) }}
 
     defaults:
       run:
@@ -115,7 +178,9 @@ jobs:
     name: Integration Smoke Test (Docker Compose)
     runs-on: ubuntu-latest
     needs:
+      - detect-changes
       - test-services
+    if: needs.detect-changes.outputs.integration_required == 'true'
     env:
       POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
       RABBITMQ_USER: admin
@@ -195,21 +260,14 @@ jobs:
     name: Build and Push Image (${{ matrix.service }})
     runs-on: ubuntu-latest
     needs:
+      - detect-changes
       - integration-compose
     ## Temp test on branch feature/cicd-pipeline only, will adjust to main after verification
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline'
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - account-service
-          - api-gateway-service
-          - bank-service
-          - credit-card-service
-          - discovery-client-service
-          - invoice-service
-          - log-service
-          - user-service
+        service: ${{ fromJson(needs.detect-changes.outputs.services_matrix) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
