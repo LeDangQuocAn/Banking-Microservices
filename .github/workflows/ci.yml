@@ -283,9 +283,28 @@ jobs:
         id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Prepare ECR repository name
+        id: prep-ecr
+        env:
+          REPO_PREFIX_RAW: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
+          REPO_ENV_RAW: ${{ vars.ECR_ENVIRONMENT || 'dev' }}
+        run: |
+          set -euo pipefail
+
+          sanitize() {
+            printf '%s' "$1" | tr -d '\r\n\t ' | tr '[:upper:]' '[:lower:]'
+          }
+
+          repo_prefix="$(sanitize "$REPO_PREFIX_RAW")"
+          repo_env="$(sanitize "$REPO_ENV_RAW")"
+          service_name="$(sanitize "${{ matrix.service }}")"
+          repository_name="${repo_prefix}-${repo_env}-${service_name}"
+
+          echo "repository_name=$repository_name" >> "$GITHUB_OUTPUT"
+
       - name: Ensure ECR repository exists
         env:
-          REPOSITORY_NAME: ${{ format('{0}-{1}-{2}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', vars.ECR_ENVIRONMENT || 'dev', matrix.service) }}
+          REPOSITORY_NAME: ${{ steps.prep-ecr.outputs.repository_name }}
         run: |
           aws ecr describe-repositories --repository-names "$REPOSITORY_NAME" >/dev/null 2>&1 || \
           aws ecr create-repository --repository-name "$REPOSITORY_NAME" >/dev/null
@@ -300,5 +319,5 @@ jobs:
           file: ${{ matrix.service }}/Dockerfile
           push: true
           tags: |
-            ${{ steps.login-ecr.outputs.registry }}/${{ format('{0}-{1}-{2}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', vars.ECR_ENVIRONMENT || 'dev', matrix.service) }}:${{ github.sha }}
-            ${{ steps.login-ecr.outputs.registry }}/${{ format('{0}-{1}-{2}', vars.ECR_REPOSITORY_PREFIX || 'banking-microservices', vars.ECR_ENVIRONMENT || 'dev', matrix.service) }}:latest
+            ${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:latest
