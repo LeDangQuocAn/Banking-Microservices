@@ -1,0 +1,163 @@
+name: Reusable Integration Test
+
+on:
+  workflow_call:
+    inputs:
+      services_matrix:
+        description: 'JSON array of services (changed services)'
+        required: true
+        type: string
+    secrets:
+      ECR_OIDC:
+        required: true
+      CI_POSTGRES_PASSWORD:
+        required: false
+      CI_RABBITMQ_PASSWORD:
+        required: false
+      CI_MONGODB_PASSWORD:
+        required: false
+      CI_PGADMIN_EMAIL:
+        required: false
+      CI_PGADMIN_PASSWORD:
+        required: false
+      CI_MONGO_EXPRESS_USER:
+        required: false
+      CI_MONGO_EXPRESS_PASSWORD:
+        required: false
+
+jobs:
+  integration-compose:
+    name: Integration Smoke Test (Docker Compose)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'admin38' }}
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: ${{ secrets.CI_RABBITMQ_PASSWORD || 'admin38' }}
+      MONGODB_USER: an
+      MONGODB_PASSWORD: ${{ secrets.CI_MONGODB_PASSWORD || 'an123' }}
+      PGADMIN_DEFAULT_EMAIL: ${{ secrets.CI_PGADMIN_EMAIL || 'pgadmin@example.com' }}
+      PGADMIN_DEFAULT_PASSWORD: ${{ secrets.CI_PGADMIN_PASSWORD || 'admin' }}
+      MONGO_EXPRESS_USER: ${{ secrets.CI_MONGO_EXPRESS_USER || 'admin' }}
+      MONGO_EXPRESS_PASSWORD: ${{ secrets.CI_MONGO_EXPRESS_PASSWORD || 'admin' }}
+      ECR_REPOSITORY_PREFIX: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
+      ECR_ENVIRONMENT: ${{ vars.ECR_ENVIRONMENT || 'dev' }}
+      ECR_SMOKE_TAG: ${{ vars.ECR_SMOKE_TAG || 'latest' }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ECR_OIDC }}
+          role-session-name: github-actions-integration
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate Compose override for smoke test
+        run: |
+          set -euo pipefail
+
+          sanitize() {
+            printf '%s' "$1" | tr -d '\r\n\t ' | tr '[:upper:]' '[:lower:]'
+          }
+
+          prefix="$(sanitize "$ECR_REPOSITORY_PREFIX")"
+          env_name="$(sanitize "$ECR_ENVIRONMENT")"
+          smoke_tag="$(sanitize "$ECR_SMOKE_TAG")"
+
+          changed_json='${{ inputs.services_matrix }}'
+
+          services=(
+            account-service
+            api-gateway-service
+            bank-service
+            credit-card-service
+            discovery-client-service
+            invoice-service
+            log-service
+            user-service
+          )
+
+          {
+            echo "services:"
+            for service in "${services[@]}"; do
+              if echo "$changed_json" | jq -e --arg s "$service" 'index($s) != null' >/dev/null; then
+                echo "  $service:"
+                echo "    pull_policy: never"
+              else
+                repo_name="${prefix}-${env_name}-${service}"
+                echo "  $service:"
+                echo "    image: ${{ steps.login-ecr.outputs.registry }}/${repo_name}:${smoke_tag}"
+                echo "    build: null"
+                echo "    pull_policy: always"
+              fi
+            done
+          } > docker-compose.ci.override.yml
+
+          cat docker-compose.ci.override.yml
+
+      - name: Build and start core stack
+        run: |
+          docker compose -f docker-compose.yml -f docker-compose.ci.override.yml up -d --build \
+            discovery-client-service \
+            api-gateway-service \
+            user-service \
+            bank-service \
+            credit-card-service \
+            account-service \
+            invoice-service \
+            log-service \
+            postgres-db \
+            redis-db \
+            rabbitmq-log \
+            mongo
+
+      - name: Wait for service health endpoints
+        run: |
+          set -euo pipefail
+
+          check_health() {
+            local url="$1"
+            local name="$2"
+            local retries=60
+            local delay=10
+
+            for i in $(seq 1 "$retries"); do
+              if curl -fsS "$url" > /dev/null; then
+                echo "$name is healthy"
+                return 0
+              fi
+              echo "[$i/$retries] waiting for $name..."
+              sleep "$delay"
+            done
+
+            echo "$name failed to become healthy"
+            docker compose ps
+            return 1
+          }
+
+          check_health "http://localhost:8761/actuator/health" "discovery-client-service"
+          check_health "http://localhost:8087/actuator/health" "api-gateway-service"
+          check_health "http://localhost:8081/actuator/health" "user-service"
+          check_health "http://localhost:8082/actuator/health" "bank-service"
+          check_health "http://localhost:8083/actuator/health" "credit-card-service"
+          check_health "http://localhost:8084/actuator/health" "account-service"
+          check_health "http://localhost:8085/actuator/health" "invoice-service"
+          check_health "http://localhost:8086/actuator/health" "log-service"
+
+      - name: Show running containers
+        if: always()
+        run: docker compose ps
+
+      - name: Dump compose logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+
+      - name: Tear down stack
+        if: always()
+        run: docker compose down -v

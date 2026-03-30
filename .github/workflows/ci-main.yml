@@ -1,0 +1,129 @@
+name: CI Main
+
+on:
+  push:
+    branches:
+      - "**"
+  pull_request:
+    branches:
+      - "**"
+
+permissions:
+  # OIDC auth to AWS requires id-token: write.
+  contents: read
+  id-token: write
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1) detect changes, 2) test changed services, 3) optional integration smoke test, 4) push changed images.
+
+  detect-changes:
+    # Produces a dynamic matrix so later jobs run only for changed services.
+    name: Detect Changed Services
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      services_matrix: ${{ steps.set-matrix.outputs.services_matrix }}
+      any_service_changed: ${{ steps.set-matrix.outputs.any_service_changed }}
+      integration_required: ${{ steps.set-matrix.outputs.integration_required }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Filter changed paths
+        id: changes
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            account-service:
+              - 'account-service/**'
+            api-gateway-service:
+              - 'api-gateway-service/**'
+            bank-service:
+              - 'bank-service/**'
+            credit-card-service:
+              - 'credit-card-service/**'
+            discovery-client-service:
+              - 'discovery-client-service/**'
+            invoice-service:
+              - 'invoice-service/**'
+            log-service:
+              - 'log-service/**'
+            user-service:
+              - 'user-service/**'
+            integration:
+              - 'docker-compose.yml'
+              - '.github/workflows/ci.yml'
+
+      - name: Build dynamic matrix
+        id: set-matrix
+        run: |
+          set -euo pipefail
+
+          services=()
+
+          [[ "${{ steps.changes.outputs.account-service }}" == "true" ]] && services+=("account-service")
+          [[ "${{ steps.changes.outputs.api-gateway-service }}" == "true" ]] && services+=("api-gateway-service")
+          [[ "${{ steps.changes.outputs.bank-service }}" == "true" ]] && services+=("bank-service")
+          [[ "${{ steps.changes.outputs.credit-card-service }}" == "true" ]] && services+=("credit-card-service")
+          [[ "${{ steps.changes.outputs.discovery-client-service }}" == "true" ]] && services+=("discovery-client-service")
+          [[ "${{ steps.changes.outputs.invoice-service }}" == "true" ]] && services+=("invoice-service")
+          [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
+          [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
+
+          if [[ ${#services[@]} -eq 0 ]]; then
+            echo "services_matrix=[]" >> "$GITHUB_OUTPUT"
+            echo "any_service_changed=false" >> "$GITHUB_OUTPUT"
+            if [[ "${{ steps.changes.outputs.integration }}" == "true" ]]; then
+              echo "integration_required=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "integration_required=false" >> "$GITHUB_OUTPUT"
+            fi
+            exit 0
+          fi
+
+          matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
+          echo "services_matrix=$matrix_json" >> "$GITHUB_OUTPUT"
+          echo "any_service_changed=true" >> "$GITHUB_OUTPUT"
+          echo "integration_required=true" >> "$GITHUB_OUTPUT"
+
+  test-services:
+    # Fast feedback: per-service tests in parallel for changed services only.
+    name: Test Services
+    uses: ./.github/workflows/r-test-and-scan-code.yml
+    needs:
+      - detect-changes
+    if: needs.detect-changes.outputs.any_service_changed == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+    secrets: inherit
+
+  integration-compose:
+    # End-to-end smoke check of the composed stack (push events only).
+    name: Integration Test
+    uses: ./.github/workflows/r-integration-test.yml
+    needs:
+      - detect-changes
+      - test-services
+    if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+    secrets: inherit
+
+  build-and-push-ecr:
+    # Publish changed service images to ECR using OIDC and matrix build.
+    name: Build and Push Images
+    uses: ./.github/workflows/r-build-scan-push.yml
+    needs:
+      - detect-changes
+      - integration-compose
+    # Temporary gate for branch testing; switch to main when ready.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+      ref: ${{ github.ref }}
+      event_name: ${{ github.event_name }}
+    secrets: inherit
