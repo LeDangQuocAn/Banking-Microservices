@@ -22,10 +22,7 @@
         <xstream.version>1.4.21</xstream.version>
         <commons-fileupload.version>1.6.0</commons-fileupload.version>
         <commons-io.version>2.14.0</commons-io.version>
-<<<<<<< HEAD
         <postgresql.version>42.7.7</postgresql.version>
-=======
->>>>>>> bf83ed9 (Update Spring Boot parent, fix dependencies)
     </properties>
     <dependencies>
         <dependency>
