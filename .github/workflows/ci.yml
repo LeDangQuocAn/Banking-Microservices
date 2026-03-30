@@ -223,7 +223,7 @@ jobs:
     needs:
       - detect-changes
       - test-services
-    if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
+    if: needs.detect-changes.outputs.integration_required == 'true' && (github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.force_all_services == true))
     env:
       POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
       RABBITMQ_USER: admin
@@ -365,7 +365,7 @@ jobs:
       - detect-changes
       - integration-compose
     # Temporary gate for branch testing; switch to main when ready.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: ((github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline') || (github.event_name == 'workflow_dispatch' && inputs.force_all_services == true)) && needs.detect-changes.outputs.any_service_changed == 'true'
     strategy:
       fail-fast: false
       matrix:
