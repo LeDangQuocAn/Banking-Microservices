@@ -204,13 +204,70 @@ jobs:
       PGADMIN_DEFAULT_PASSWORD: ${{ secrets['CI_PGADMIN_PASSWORD'] || 'admin' }}
       MONGO_EXPRESS_USER: ${{ secrets['CI_MONGO_EXPRESS_USER'] || 'admin' }}
       MONGO_EXPRESS_PASSWORD: ${{ secrets['CI_MONGO_EXPRESS_PASSWORD'] || 'admin' }}
+      ECR_REPOSITORY_PREFIX: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
+      ECR_ENVIRONMENT: ${{ vars.ECR_ENVIRONMENT || 'dev' }}
+      ECR_SMOKE_TAG: ${{ vars.ECR_SMOKE_TAG || 'latest' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ECR_OIDC }}
+          role-session-name: github-actions-integration
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Generate Compose override for smoke test
+        run: |
+          set -euo pipefail
+
+          sanitize() {
+            printf '%s' "$1" | tr -d '\r\n\t ' | tr '[:upper:]' '[:lower:]'
+          }
+
+          prefix="$(sanitize "$ECR_REPOSITORY_PREFIX")"
+          env_name="$(sanitize "$ECR_ENVIRONMENT")"
+          smoke_tag="$(sanitize "$ECR_SMOKE_TAG")"
+
+          changed_json='${{ needs.detect-changes.outputs.services_matrix }}'
+
+          services=(
+            account-service
+            api-gateway-service
+            bank-service
+            credit-card-service
+            discovery-client-service
+            invoice-service
+            log-service
+            user-service
+          )
+
+          {
+            echo "services:"
+            for service in "${services[@]}"; do
+              if echo "$changed_json" | jq -e --arg s "$service" 'index($s) != null' >/dev/null; then
+                echo "  $service:"
+                echo "    pull_policy: never"
+              else
+                repo_name="${prefix}-${env_name}-${service}"
+                echo "  $service:"
+                echo "    image: ${{ steps.login-ecr.outputs.registry }}/${repo_name}:${smoke_tag}"
+                echo "    build: null"
+                echo "    pull_policy: always"
+              fi
+            done
+          } > docker-compose.ci.override.yml
+
+          cat docker-compose.ci.override.yml
+
       - name: Build and start core stack
         run: |
-          docker compose up -d --build \
+          docker compose -f docker-compose.yml -f docker-compose.ci.override.yml up -d --build \
             discovery-client-service \
             api-gateway-service \
             user-service \
@@ -333,7 +390,9 @@ jobs:
           context: ${{ matrix.service }}
           file: ${{ matrix.service }}/Dockerfile
           push: true
-          cache-from: type=gha
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:latest
           cache-to: type=gha,mode=max
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:${{ github.sha }}
