@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - "**"
+  workflow_dispatch:
+    inputs:
+      force_all_services:
+        description: "Run all services even if no service folder changed"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   # OIDC auth to AWS requires id-token: write.
@@ -60,8 +67,21 @@ jobs:
 
       - name: Build dynamic matrix
         id: set-matrix
+        env:
+          FORCE_ALL_SERVICES: ${{ github.event_name == 'workflow_dispatch' && inputs.force_all_services == true }}
         run: |
           set -euo pipefail
+
+          all_services=(
+            account-service
+            api-gateway-service
+            bank-service
+            credit-card-service
+            discovery-client-service
+            invoice-service
+            log-service
+            user-service
+          )
 
           services=()
 
@@ -73,6 +93,16 @@ jobs:
           [[ "${{ steps.changes.outputs.invoice-service }}" == "true" ]] && services+=("invoice-service")
           [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
           [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
+
+          # For pipeline testing, allow forcing full matrix manually.
+          if [[ "$FORCE_ALL_SERVICES" == "true" ]]; then
+            services=("${all_services[@]}")
+          fi
+
+          # If CI or compose config changes, run full matrix to validate workflow behavior.
+          if [[ ${#services[@]} -eq 0 && "${{ steps.changes.outputs.integration }}" == "true" ]]; then
+            services=("${all_services[@]}")
+          fi
 
           if [[ ${#services[@]} -eq 0 ]]; then
             echo "services_matrix=[]" >> "$GITHUB_OUTPUT"
