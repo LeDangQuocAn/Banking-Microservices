@@ -9,13 +9,22 @@ on:
       - "**"
 
 permissions:
+  # OIDC auth to AWS requires id-token: write.
   contents: read
   id-token: write
 
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # 1) detect changes, 2) test changed services, 3) optional integration smoke test, 4) push changed images.
+
   detect-changes:
+    # Produces a dynamic matrix so later jobs run only for changed services.
     name: Detect Changed Services
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     outputs:
       services_matrix: ${{ steps.set-matrix.outputs.services_matrix }}
       any_service_changed: ${{ steps.set-matrix.outputs.any_service_changed }}
@@ -82,8 +91,10 @@ jobs:
           echo "integration_required=true" >> "$GITHUB_OUTPUT"
 
   test-services:
+    # Fast feedback: per-service tests in parallel for changed services only.
     name: Unit and Context Tests (${{ matrix.service }})
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     needs:
       - detect-changes
     if: needs.detect-changes.outputs.any_service_changed == 'true'
@@ -175,12 +186,14 @@ jobs:
         run: ./mvnw -B test
 
   integration-compose:
+    # End-to-end smoke check of the composed stack (push events only).
     name: Integration Smoke Test (Docker Compose)
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - detect-changes
       - test-services
-    if: needs.detect-changes.outputs.integration_required == 'true'
+    if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
     env:
       POSTGRES_PASSWORD: ${{ secrets['CI_POSTGRES_PASSWORD'] || 'admin38' }}
       RABBITMQ_USER: admin
@@ -257,12 +270,14 @@ jobs:
         run: docker compose down -v
 
   build-and-push-ecr:
+    # Publish changed service images to ECR using OIDC and matrix build.
     name: Build and Push Image (${{ matrix.service }})
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     needs:
       - detect-changes
       - integration-compose
-    ## Temp test on branch feature/cicd-pipeline only, will adjust to main after verification
+    # Temporary gate for branch testing; switch to main when ready.
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
     strategy:
       fail-fast: false
@@ -318,6 +333,8 @@ jobs:
           context: ${{ matrix.service }}
           file: ${{ matrix.service }}/Dockerfile
           push: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
           tags: |
             ${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:${{ github.sha }}
             ${{ steps.login-ecr.outputs.registry }}/${{ steps.prep-ecr.outputs.repository_name }}:latest
