@@ -101,17 +101,17 @@ jobs:
       services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
     secrets: inherit
 
-  # integration-compose:
-  #   # End-to-end smoke check of the composed stack (push events only).
-  #   name: Integration Test
-  #   uses: ./.github/workflows/r-integration-test.yml
-  #   needs:
-  #     - detect-changes
-  #     - test-services
-  #   if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
-  #   with:
-  #     services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
-  #   secrets: inherit
+  integration-compose:
+     # End-to-end smoke check of the composed stack (push events only).
+     name: Integration Test
+     uses: ./.github/workflows/r-integration-test.yml
+     needs:
+       - detect-changes
+       - test-services
+     if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
+     with:
+       services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+     secrets: inherit
 
   build-and-push-ecr:
     # Publish changed service images to ECR using OIDC and matrix build.
@@ -119,7 +119,7 @@ jobs:
     uses: ./.github/workflows/r-build-scan-push.yml
     needs:
       - detect-changes
-#      - integration-compose
+      - integration-compose
     # Temporary gate for branch testing; switch to main when ready.
     if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
