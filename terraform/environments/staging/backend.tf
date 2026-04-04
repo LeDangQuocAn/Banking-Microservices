@@ -2,7 +2,7 @@ terraform {
   cloud {
     organization = "devsecops-tfstate-microservices"
     workspaces {
-      name = "banking-ms-dev"
+      name = "banking-ms-staging"
     }
   }
 }

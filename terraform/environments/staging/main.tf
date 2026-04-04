@@ -3,7 +3,7 @@ module "vpc" {
   source = "../../modules/vpc"
 
   project      = "Banking-Microservices"
-  env          = "Dev"
+  env          = "Staging"
   cluster_name = var.cluster_name
 
   vpc_cidr             = var.vpc_cidr
@@ -19,7 +19,7 @@ module "security" {
   source = "../../modules/security"
 
   project = "Banking-Microservices"
-  env     = "Dev"
+  env     = "Staging"
 
   # Sourced from vpc module — passed straight through so security
   # groups are created inside the correct VPC.
@@ -37,7 +37,7 @@ module "eks" {
   source = "../../modules/eks"
 
   project      = "Banking-Microservices"
-  env          = "Dev"
+  env          = "Staging"
   cluster_name = var.cluster_name
 
   cluster_version                      = var.cluster_version
@@ -72,7 +72,7 @@ module "rds" {
   source = "../../modules/rds"
 
   project = "Banking-Microservices"
-  env     = "Dev"
+  env     = "Staging"
 
   # Networking — private subnets from vpc module
   private_subnet_ids = module.vpc.private_subnet_ids
@@ -112,7 +112,7 @@ module "documentdb" {
   source = "../../modules/documentdb"
 
   project = "Banking-Microservices"
-  env     = "Dev"
+  env     = "Staging"
 
   # Networking
   private_subnet_ids = module.vpc.private_subnet_ids
@@ -140,7 +140,7 @@ module "elasticache" {
   source = "../../modules/elasticache"
 
   project = "Banking-Microservices"
-  env     = "Dev"
+  env     = "Staging"
 
   # Networking
   private_subnet_ids = module.vpc.private_subnet_ids
@@ -171,7 +171,7 @@ module "ecr" {
   source = "../../modules/ecr"
 
   project = "Banking-Microservices"
-  env     = "Dev"
+  env     = "Staging"
 
   # Image settings
   image_tag_mutability = var.ecr_image_tag_mutability

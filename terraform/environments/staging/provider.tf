@@ -24,7 +24,7 @@ provider "aws" {
   default_tags {
     tags = {
       Project     = "Banking-Microservices"
-      Environment = "Dev"
+      Environment = "Staging"
       ManagedBy   = "Terraform"
       Owner       = "KhoiP"
     }
