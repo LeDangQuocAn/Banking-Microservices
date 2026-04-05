@@ -34,7 +34,7 @@ jobs:
             -v "$GITHUB_WORKSPACE:/github/workspace" \
             -w /github/workspace \
             ghcr.io/gitleaks/gitleaks:v8.30.1 \
-            -lc 'mkdir -p "$HOME" && git config --global --add safe.directory /github/workspace && gitleaks git --source=. --no-banner --redact --exit-code 1'
+            -lc 'mkdir -p "$HOME" && git config --global --add safe.directory /github/workspace && gitleaks git . --no-banner --redact --exit-code 1'
 
   test-services:
     name: Unit and Context Tests (${{ matrix.service }})
