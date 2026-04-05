@@ -1,0 +1,87 @@
+name: Reusable Promote ECR Image
+
+on:
+  workflow_call:
+    inputs:
+      services_matrix:
+        description: 'JSON array of services to promote'
+        required: true
+        type: string
+      source_environment:
+        description: 'Source ECR environment name'
+        required: true
+        type: string
+      target_environment:
+        description: 'Target ECR environment name'
+        required: true
+        type: string
+      source_image_tag:
+        description: 'Image tag to copy from source to target'
+        required: true
+        type: string
+    secrets:
+      ECR_OIDC:
+        required: true
+
+jobs:
+  promote-ecr-image:
+    name: Promote Image (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(inputs.services_matrix) }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.ECR_OIDC }}
+          role-session-name: github-actions-promote-ecr
+          aws-region: ${{ vars.AWS_REGION || 'us-east-1' }}
+
+      - name: Promote image tag into target ECR repository
+        env:
+          REPO_PREFIX_RAW: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
+          SOURCE_ENV_RAW: ${{ inputs.source_environment }}
+          TARGET_ENV_RAW: ${{ inputs.target_environment }}
+          SOURCE_IMAGE_TAG: ${{ inputs.source_image_tag }}
+        run: |
+          set -euo pipefail
+
+          sanitize() {
+            printf '%s' "$1" | tr -d '\r\n\t ' | tr '[:upper:]' '[:lower:]'
+          }
+
+          repo_prefix="$(sanitize "$REPO_PREFIX_RAW")"
+          source_env="$(sanitize "$SOURCE_ENV_RAW")"
+          target_env="$(sanitize "$TARGET_ENV_RAW")"
+          service_name="$(sanitize "${{ matrix.service }}")"
+
+          source_repo="${repo_prefix}-${source_env}-${service_name}"
+          target_repo="${repo_prefix}-${target_env}-${service_name}"
+
+          if aws ecr batch-get-image \
+            --repository-name "$target_repo" \
+            --image-ids imageTag="$SOURCE_IMAGE_TAG" \
+            --query 'images[0].imageId.imageTag' \
+            --output text >/dev/null 2>&1; then
+            echo "${target_repo}:${SOURCE_IMAGE_TAG} already exists; skipping"
+            exit 0
+          fi
+
+          manifest="$(aws ecr batch-get-image \
+            --repository-name "$source_repo" \
+            --image-ids imageTag="$SOURCE_IMAGE_TAG" \
+            --query 'images[0].imageManifest' \
+            --output text)"
+
+          aws ecr put-image \
+            --repository-name "$target_repo" \
+            --image-tag "$SOURCE_IMAGE_TAG" \
+            --image-manifest "$manifest" >/dev/null
+
+          echo "Promoted ${source_repo}:${SOURCE_IMAGE_TAG} to ${target_repo}:${SOURCE_IMAGE_TAG}"

@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.2.4</version>
+        <version>3.4.5</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>unaldi</groupId>
@@ -15,7 +15,12 @@
     <description>api-gateway-service</description>
     <properties>
         <java.version>21</java.version>
-        <spring-cloud.version>2023.0.1</spring-cloud.version>
+        <spring-cloud.version>2024.0.1</spring-cloud.version>
+        <spring-cloud-gateway.version>4.2.6</spring-cloud-gateway.version>
+        <spring-framework.version>6.2.11</spring-framework.version>
+        <tomcat.version>10.1.52</tomcat.version>
+        <netty.version>4.1.132.Final</netty.version>
+        <xstream.version>1.4.21</xstream.version>
     </properties>
     <dependencies>
         <dependency>
@@ -44,6 +49,16 @@
                 <version>${spring-cloud.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.thoughtworks.xstream</groupId>
+                <artifactId>xstream</artifactId>
+                <version>${xstream.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.cloud</groupId>
+                <artifactId>spring-cloud-gateway-server</artifactId>
+                <version>${spring-cloud-gateway.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

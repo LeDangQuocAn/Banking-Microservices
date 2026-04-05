@@ -1,0 +1,108 @@
+name: Reusable Test and Scan Code
+
+on:
+  workflow_call:
+    inputs:
+      services_matrix:
+        description: 'JSON array of services to test'
+        required: true
+        type: string
+    secrets:
+      CI_POSTGRES_PASSWORD:
+        required: false
+      CI_RABBITMQ_PASSWORD:
+        required: false
+      CI_MONGODB_PASSWORD:
+        required: false
+
+jobs:
+  test-services:
+    name: Unit and Context Tests (${{ matrix.service }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: banking-microservices
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'admin38' }}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d banking-microservices"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          RABBITMQ_DEFAULT_USER: admin
+          RABBITMQ_DEFAULT_PASS: ${{ secrets.CI_RABBITMQ_PASSWORD || 'admin38' }}
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      mongodb:
+        image: mongo:7
+        env:
+          MONGO_INITDB_ROOT_USERNAME: an
+          MONGO_INITDB_ROOT_PASSWORD: ${{ secrets.CI_MONGODB_PASSWORD || 'an123' }}
+          MONGO_INITDB_DATABASE: banking-microservices
+        ports:
+          - 27017:27017
+    env:
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'admin38' }}
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+      REDIS_DB: 0
+      RABBITMQ_HOST: localhost
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: admin
+      RABBITMQ_PASSWORD: ${{ secrets.CI_RABBITMQ_PASSWORD || 'admin38' }}
+      MONGODB_HOST: localhost
+      MONGODB_PORT: 27017
+      MONGODB_DB: banking-microservices
+      MONGODB_USER: an
+      MONGODB_PASSWORD: ${{ secrets.CI_MONGODB_PASSWORD || 'an123' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        service: ${{ fromJson(inputs.services_matrix) }}
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.service }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+          cache-dependency-path: ${{ matrix.service }}/pom.xml
+
+      - name: Ensure Maven wrapper is executable
+        run: chmod +x mvnw
+
+      - name: Run tests
+        run: ./mvnw -B test
