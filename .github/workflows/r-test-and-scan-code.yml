@@ -28,6 +28,9 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Mark workspace as safe for Git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Run Gitleaks scan
         uses: docker://ghcr.io/gitleaks/gitleaks:latest
         with:
