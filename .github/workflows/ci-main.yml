@@ -2,11 +2,11 @@ name: CI Main
 
 on:
   push:
-    branches:
-      - "**"
+    branches-ignore:
+      - production
   pull_request:
-    branches:
-      - "**"
+    branches-ignore:
+      - production
 
 permissions:
   # OIDC auth to AWS requires id-token: write.
@@ -18,17 +18,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) detect changes, 2) test changed services, 3) optional integration smoke test, 4) push changed images.
+  # 1) detect changes, 2) test services, 3) integration smoke test, 4) push staging images.
 
   detect-changes:
-    # Produces a dynamic matrix so later jobs run only for changed services.
     name: Detect Changed Services
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
-      services_matrix: ${{ steps.set-matrix.outputs.services_matrix }}
+      changed_services_matrix: ${{ steps.set-matrix.outputs.changed_services_matrix }}
+      full_services_matrix: ${{ steps.set-matrix.outputs.full_services_matrix }}
       any_service_changed: ${{ steps.set-matrix.outputs.any_service_changed }}
-      integration_required: ${{ steps.set-matrix.outputs.integration_required }}
+      is_staging: ${{ steps.set-matrix.outputs.is_staging }}
+      target_environment: ${{ steps.set-matrix.outputs.target_environment }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -56,12 +57,23 @@ jobs:
               - 'user-service/**'
             integration:
               - 'docker-compose.yml'
-              - '.github/workflows/ci.yml'
+              - '.github/workflows/**'
 
       - name: Build dynamic matrix
         id: set-matrix
         run: |
           set -euo pipefail
+
+          services_all=(
+            account-service
+            api-gateway-service
+            bank-service
+            credit-card-service
+            discovery-client-service
+            invoice-service
+            log-service
+            user-service
+          )
 
           services=()
 
@@ -74,56 +86,60 @@ jobs:
           [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
           [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
 
-          if [[ ${#services[@]} -eq 0 ]]; then
-            echo "services_matrix=[]" >> "$GITHUB_OUTPUT"
-            echo "any_service_changed=false" >> "$GITHUB_OUTPUT"
-            if [[ "${{ steps.changes.outputs.integration }}" == "true" ]]; then
-              echo "integration_required=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "integration_required=false" >> "$GITHUB_OUTPUT"
-            fi
-            exit 0
+          target_branch="${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}"
+
+          if [[ "$target_branch" == "main" || "$target_branch" == "master" ]]; then
+            target_environment="staging"
+            full_matrix_json="$(printf '%s\n' "${services_all[@]}" | jq -R . | jq -sc .)"
+          else
+            target_environment="dev"
+            full_matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
           fi
 
-          matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
-          echo "services_matrix=$matrix_json" >> "$GITHUB_OUTPUT"
-          echo "any_service_changed=true" >> "$GITHUB_OUTPUT"
-          echo "integration_required=true" >> "$GITHUB_OUTPUT"
+          if [[ ${#services[@]} -eq 0 ]]; then
+            changed_matrix_json='[]'
+            any_service_changed=false
+          else
+            changed_matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
+            any_service_changed=true
+          fi
+
+          echo "changed_services_matrix=$changed_matrix_json" >> "$GITHUB_OUTPUT"
+          echo "full_services_matrix=$full_matrix_json" >> "$GITHUB_OUTPUT"
+          echo "any_service_changed=$any_service_changed" >> "$GITHUB_OUTPUT"
+          echo "is_staging=$([[ \"$target_environment\" == \"staging\" ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "target_environment=$target_environment" >> "$GITHUB_OUTPUT"
 
   test-services:
-    # Fast feedback: per-service tests in parallel for changed services only.
     name: Test Services
     uses: ./.github/workflows/r-test-and-scan-code.yml
     needs:
       - detect-changes
-    if: needs.detect-changes.outputs.any_service_changed == 'true'
+    if: needs.detect-changes.outputs.is_staging == 'true' || needs.detect-changes.outputs.any_service_changed == 'true'
     with:
-      services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+      services_matrix: ${{ needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.full_services_matrix || needs.detect-changes.outputs.changed_services_matrix }}
     secrets: inherit
 
   integration-compose:
-     # End-to-end smoke check of the composed stack (push events only).
-     name: Integration Test
-     uses: ./.github/workflows/r-integration-test.yml
-     needs:
-       - detect-changes
-       - test-services
-     if: needs.detect-changes.outputs.integration_required == 'true' && github.event_name == 'push'
-     with:
-       services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
-     secrets: inherit
+    name: Integration Test
+    uses: ./.github/workflows/r-integration-test.yml
+    needs:
+      - detect-changes
+      - test-services
+    if: needs.detect-changes.outputs.is_staging == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
+    secrets: inherit
 
   build-and-push-ecr:
-    # Publish changed service images to ECR using OIDC and matrix build.
     name: Build and Push Images
     uses: ./.github/workflows/r-build-scan-push.yml
     needs:
       - detect-changes
       - integration-compose
-    # Temporary gate for branch testing; switch to main when ready.
-    if: github.event_name == 'push' && github.ref == 'refs/heads/feature/cicd-pipeline' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
-      services_matrix: ${{ needs.detect-changes.outputs.services_matrix }}
+      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
       ref: ${{ github.ref }}
       event_name: ${{ github.event_name }}
     secrets: inherit
