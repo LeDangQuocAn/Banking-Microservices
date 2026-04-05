@@ -14,6 +14,8 @@ on:
         required: false
       CI_MONGODB_PASSWORD:
         required: false
+      SONAR_TOKEN:
+        required: true
 
 jobs:
   test-services:
@@ -105,4 +107,16 @@ jobs:
         run: chmod +x mvnw
 
       - name: Run tests
-        run: ./mvnw -B test
+        run: ./mvnw -B verify
+
+      - name: SonarCloud analysis
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          ./mvnw -B sonar:sonar \
+            -Dsonar.projectKey=${{ vars.SONAR_ORGANIZATION }}_${{ matrix.service }} \
+            -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
+            -Dsonar.qualitygate.wait=false
