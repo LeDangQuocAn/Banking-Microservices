@@ -47,7 +47,7 @@ jobs:
         id: prep-ecr
         env:
           REPO_PREFIX_RAW: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
-          REPO_ENV_RAW: ${{ vars.ECR_ENVIRONMENT || 'dev' }}
+          REPO_ENV_RAW: staging
         run: |
           set -euo pipefail
 
