@@ -121,4 +121,4 @@ jobs:
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
             -Dsonar.coverage.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java" \
             -Dsonar.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java" \
-            -Dsonar.qualitygate.wait=false // Run analysis without waiting for quality gate result
+            -Dsonar.qualitygate.wait=false
