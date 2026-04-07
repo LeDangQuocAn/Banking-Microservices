@@ -1,0 +1,4 @@
+# Historical false positives from docker-compose.yml
+# Generated from Gitleaks report findings in commit history.
+953913bc01deb1d58b0b9eb71d23e85b03d6bfa7:out/production/banking-microservices/docker-compose.yml:generic-api-key:32
+3430c060110a5993a21c43e04f9e404d3693025e:docker-compose.yml:generic-api-key:32
