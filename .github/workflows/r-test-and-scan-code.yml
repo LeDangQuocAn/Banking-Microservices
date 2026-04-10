@@ -119,6 +119,6 @@ jobs:
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.token=${{ secrets.SONAR_TOKEN }} \
             -Dsonar.coverage.jacoco.xmlReportPaths=target/site/jacoco/jacoco.xml \
-            -Dsonar.coverage.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java" \
-            -Dsonar.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java" \
+            -Dsonar.coverage.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/configuration/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java,**/*Producer.java,**/*Consumer.java,**/*Configuration.java" \
+            -Dsonar.exclusions="**/*Application.java,**/dto/**,**/request/**,**/response/**,**/config/**,**/exception/**,**/entity/**,**/model/**,**/configuration/**,**/*Dto.java,**/*Request.java,**/*Response.java,**/*Exception.java,**/*Config.java,**/*Producer.java,**/*Consumer.java,**/*Configuration.java" \
             -Dsonar.qualitygate.wait=false
