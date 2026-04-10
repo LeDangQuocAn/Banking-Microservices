@@ -14,6 +14,7 @@ import unaldi.invoiceservice.entity.request.InvoiceSaveRequest;
 import unaldi.invoiceservice.entity.request.InvoiceUpdateRequest;
 import unaldi.invoiceservice.service.abstracts.InvoiceService;
 import unaldi.invoiceservice.utils.ObjectFactory;
+import unaldi.invoiceservice.utils.rabbitMQ.producer.LogProducer;
 import unaldi.invoiceservice.utils.client.dto.UserResponse;
 import unaldi.invoiceservice.utils.result.DataResult;
 import unaldi.invoiceservice.utils.result.Result;
@@ -44,6 +45,9 @@ class InvoiceControllerTest {
 
     @MockBean
     private InvoiceService invoiceService;
+
+    @MockBean
+    private LogProducer logProducer;
 
     private static Invoice invoice;
     private static InvoiceSaveRequest invoiceSaveRequest;

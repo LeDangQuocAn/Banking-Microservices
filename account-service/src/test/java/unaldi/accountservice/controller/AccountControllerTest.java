@@ -14,6 +14,7 @@ import unaldi.accountservice.entity.request.AccountSaveRequest;
 import unaldi.accountservice.entity.request.AccountUpdateRequest;
 import unaldi.accountservice.service.abstracts.AccountService;
 import unaldi.accountservice.utils.ObjectFactory;
+import unaldi.accountservice.utils.rabbitMQ.producer.LogProducer;
 import unaldi.accountservice.utils.client.dto.BankResponse;
 import unaldi.accountservice.utils.client.dto.UserResponse;
 import unaldi.accountservice.utils.result.DataResult;
@@ -45,6 +46,9 @@ class AccountControllerTest {
 
     @MockBean
     private AccountService accountService;
+
+    @MockBean
+    private LogProducer logProducer;
 
     private static Account account;
     private static AccountSaveRequest accountSaveRequest;

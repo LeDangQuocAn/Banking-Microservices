@@ -15,6 +15,7 @@ import unaldi.userservice.entity.request.UserSaveRequest;
 import unaldi.userservice.entity.request.UserUpdateRequest;
 import unaldi.userservice.service.abstracts.UserService;
 import unaldi.userservice.utils.ObjectFactory;
+import unaldi.userservice.utils.rabbitMQ.producer.LogProducer;
 import unaldi.userservice.utils.result.DataResult;
 import unaldi.userservice.utils.result.Result;
 import unaldi.userservice.utils.result.SuccessDataResult;
@@ -44,6 +45,9 @@ class UserControllerTest {
 
     @MockBean
     private UserService userService;
+
+    @MockBean
+    private LogProducer logProducer;
 
     private static User user;
     private static UserSaveRequest userSaveRequest;

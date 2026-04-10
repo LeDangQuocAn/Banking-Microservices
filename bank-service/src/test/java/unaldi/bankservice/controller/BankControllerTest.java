@@ -14,6 +14,7 @@ import unaldi.bankservice.entity.request.BankSaveRequest;
 import unaldi.bankservice.entity.request.BankUpdateRequest;
 import unaldi.bankservice.service.abstracts.BankService;
 import unaldi.bankservice.utils.ObjectFactory;
+import unaldi.bankservice.utils.rabbitMQ.producer.LogProducer;
 import unaldi.bankservice.utils.result.DataResult;
 import unaldi.bankservice.utils.result.Result;
 import unaldi.bankservice.utils.result.SuccessDataResult;
@@ -43,6 +44,9 @@ class BankControllerTest {
 
     @MockBean
     private BankService bankService;
+
+    @MockBean
+    private LogProducer logProducer;
 
     private static Bank bank;
     private static BankSaveRequest bankSaveRequest;
