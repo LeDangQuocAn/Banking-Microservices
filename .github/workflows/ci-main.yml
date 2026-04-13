@@ -143,3 +143,17 @@ jobs:
       ref: ${{ github.ref }}
       event_name: ${{ github.event_name }}
     secrets: inherit
+
+  sync-gitops-values:
+    name: Sync GitOps Staging Values
+    uses: ./.github/workflows/r-sync-gitops-values.yml
+    needs:
+      - detect-changes
+      - build-and-push-ecr
+    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.any_service_changed == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
+      image_tag: ${{ github.sha }}
+      target_environment: staging
+      gitops_repository: LeDangQuocAn/banking-gitops
+    secrets: inherit

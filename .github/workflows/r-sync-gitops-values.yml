@@ -1,0 +1,212 @@
+name: Reusable Sync GitOps Values
+
+on:
+  workflow_call:
+    inputs:
+      services_matrix:
+        description: 'JSON array of services to sync into GitOps values'
+        required: true
+        type: string
+      image_tag:
+        description: 'Promoted image tag (commit SHA)'
+        required: true
+        type: string
+      target_environment:
+        description: 'Target environment values folder in GitOps repository'
+        required: false
+        default: prod
+        type: string
+      gitops_repository:
+        description: 'GitHub repository for GitOps values (owner/repo)'
+        required: false
+        default: your-org/banking-gitops
+        type: string
+      gitops_base_branch:
+        description: 'GitOps base branch for pull requests'
+        required: false
+        default: main
+        type: string
+      ecr_repository_prefix:
+        description: 'ECR repository prefix used by CI workflows'
+        required: false
+        default: banking-microservices
+        type: string
+      image_registry:
+        description: 'Optional image registry prefix, e.g. 123456.dkr.ecr.us-east-1.amazonaws.com'
+        required: false
+        default: ''
+        type: string
+    secrets:
+      GITOPS_PAT:
+        required: true
+
+jobs:
+  sync-gitops-values:
+    name: Sync GitOps Values
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout GitOps repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.gitops_repository }}
+          ref: ${{ inputs.gitops_base_branch }}
+          token: ${{ secrets.GITOPS_PAT }}
+          path: banking-gitops
+
+      - name: Update prod values files with promoted image tag
+        id: sync
+        env:
+          SERVICES_MATRIX: ${{ inputs.services_matrix }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          TARGET_ENV: ${{ inputs.target_environment }}
+          ECR_REPO_PREFIX: ${{ inputs.ecr_repository_prefix }}
+          IMAGE_REGISTRY: ${{ inputs.image_registry }}
+        run: |
+          set -euo pipefail
+
+          sanitize() {
+            printf '%s' "$1" | tr -d '\r\n\t ' | tr '[:upper:]' '[:lower:]'
+          }
+
+          target_env="$(sanitize "$TARGET_ENV")"
+          repo_prefix="$(sanitize "$ECR_REPO_PREFIX")"
+          image_registry="${IMAGE_REGISTRY%/}"
+
+          if [[ -z "$IMAGE_TAG" ]]; then
+            echo "image_tag input cannot be empty" >&2
+            exit 1
+          fi
+
+          mapfile -t services < <(jq -r '.[]' <<<"$SERVICES_MATRIX")
+
+          if [[ ${#services[@]} -eq 0 ]]; then
+            echo "No services in matrix, skipping sync"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          changed_files=()
+          summary_file="$RUNNER_TEMP/synced-images.md"
+          printf '| Service | Values file | Repository | Tag |\n|---|---|---|---|\n' > "$summary_file"
+
+          for raw_service in "${services[@]}"; do
+            service="$(sanitize "$raw_service")"
+
+            case "$service" in
+              api-gateway-service)
+                values_name="gateway-values.yaml"
+                ;;
+              *)
+                values_name="${service%-service}-values.yaml"
+                ;;
+            esac
+
+            values_file="banking-gitops/environments/${target_env}/${values_name}"
+            if [[ ! -f "$values_file" ]]; then
+              echo "Values file not found for ${service}: ${values_file}" >&2
+              exit 1
+            fi
+
+            image_repo_name="${repo_prefix}-${target_env}-${service}"
+            if [[ -n "$image_registry" ]]; then
+              image_repo="${image_registry}/${image_repo_name}"
+            else
+              image_repo="$image_repo_name"
+            fi
+
+            tmp_file="${values_file}.tmp"
+            awk -v repo="$image_repo" -v tag="$IMAGE_TAG" '
+              BEGIN { in_image = 0; repo_done = 0; tag_done = 0 }
+              {
+                if ($0 ~ /^image:[[:space:]]*$/) {
+                  in_image = 1
+                  print
+                  next
+                }
+
+                if (in_image == 1 && $0 ~ /^[^[:space:]]/) {
+                  in_image = 0
+                }
+
+                if (in_image == 1 && $0 ~ /^[[:space:]]+repository:[[:space:]]*/) {
+                  print "  repository: " repo
+                  repo_done = 1
+                  next
+                }
+
+                if (in_image == 1 && $0 ~ /^[[:space:]]+tag:[[:space:]]*/) {
+                  print "  tag: \"" tag "\""
+                  tag_done = 1
+                  next
+                }
+
+                print
+              }
+              END {
+                if (repo_done == 0 || tag_done == 0) {
+                  exit 42
+                }
+              }
+            ' "$values_file" > "$tmp_file"
+
+            mv "$tmp_file" "$values_file"
+
+            if ! git -C banking-gitops diff --quiet -- "$values_file"; then
+              changed_files+=("$values_file")
+            fi
+
+            printf '| %s | %s | %s | %s |\n' "$service" "$values_name" "$image_repo" "$IMAGE_TAG" >> "$summary_file"
+          done
+
+          if [[ ${#changed_files[@]} -eq 0 ]]; then
+            echo "No GitOps values changed"
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            {
+              echo "has_changes=true"
+              echo "changed_files<<EOF"
+              printf '%s\n' "${changed_files[@]}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
+          cp "$summary_file" banking-gitops/promotion-summary.md
+
+      - name: Create pull request in GitOps repository
+        id: cpr
+        if: steps.sync.outputs.has_changes == 'true'
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITOPS_PAT }}
+          path: banking-gitops
+          commit-message: "chore(gitops): sync prod image tags to ${{ inputs.image_tag }}"
+          title: "chore(gitops): sync prod image tags to ${{ inputs.image_tag }}"
+          body: |
+            This PR was created automatically after production image promotion.
+
+            - Environment: `${{ inputs.target_environment }}`
+            - Image tag: `${{ inputs.image_tag }}`
+            - Source workflow: `${{ github.workflow }}`
+            - Source run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+
+            Changed files:
+            `${{ steps.sync.outputs.changed_files }}`
+          branch: "automation/sync-${{ inputs.target_environment }}-images-${{ inputs.image_tag }}"
+          base: ${{ inputs.gitops_base_branch }}
+          labels: |
+            automation
+            gitops
+            deployment
+
+      - name: Upload sync summary artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gitops-sync-summary-${{ inputs.target_environment }}-${{ github.run_id }}
+          path: banking-gitops/promotion-summary.md
+
+      - name: Print PR URL
+        if: steps.cpr.outputs.pull-request-url != ''
+        run: |
+          echo "GitOps PR: ${{ steps.cpr.outputs.pull-request-url }}"

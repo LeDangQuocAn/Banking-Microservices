@@ -90,3 +90,17 @@ jobs:
       target_environment: prod
       source_image_tag: ${{ github.event.pull_request.head.sha }}
     secrets: inherit
+
+  sync-gitops-values:
+    name: Sync GitOps Production Values
+    uses: ./.github/workflows/r-sync-gitops-values.yml
+    needs:
+      - detect-changes
+      - promote-images
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
+      image_tag: ${{ github.event.pull_request.head.sha }}
+      target_environment: prod
+      gitops_repository: LeDangQuocAn/banking-gitops
+    secrets: inherit
