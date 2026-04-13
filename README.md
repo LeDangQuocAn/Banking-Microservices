@@ -6,6 +6,7 @@
 - [Database Entity Relationships](#database-entity-relationships)
 - [Technology Stack](#technology-stack)
 - [Build and Run Project](#build-and-run-project)
+- [Production Promotion Handoff](#production-promotion-handoff)
 - [Service Endpoints](#service-endpoints)
 
 ## `Introduction`
@@ -103,6 +104,36 @@ After all services are up and running with `Docker`:
 - `RabbitMQ` interface can be accessed from port **15672**
 - `Mongo Express` interface can be accessed from port **8088**
 > All running services can access dependent graphic interfaces via the web without being dependent on the local environment.
+
+## `Production Promotion Handoff`
+
+Production promotion is split into two phases:
+
+1. Image promotion in CI
+- Merge a PR from `main` into `production`.
+- Workflow `CI Production` promotes changed service images from staging ECR to prod ECR using the merge commit SHA.
+
+2. GitOps values sync and deploy
+- The same workflow calls reusable workflow `Reusable Sync GitOps Values`.
+- It updates changed files in `banking-gitops/environments/prod/*-values.yaml` with:
+  - `image.repository`: `${ECR_REPOSITORY_PREFIX}-prod-{service}` (optionally prefixed with `${ECR_REGISTRY}`)
+  - `image.tag`: promoted commit SHA
+- It then opens an automated PR in the GitOps repository.
+
+Temporary deploy mode (until ArgoCD cutover):
+- After the GitOps PR is merged, run Helm for changed services only.
+- Example command:
+
+```bash
+helm upgrade --install account-prod charts/banking-spring-boot \
+  -n banking-prod \
+  -f environments/prod/account-values.yaml
+```
+
+Required CI secrets/variables:
+- Secret: `GITOPS_REPO_TOKEN` (token that can push and open PRs in the GitOps repository)
+- Update `gitops_repository` in `.github/workflows/ci-production.yml` to your actual GitOps repo (default placeholder: `your-org/banking-gitops`)
+- Optional: in `.github/workflows/r-sync-gitops-values.yml`, adjust defaults for `gitops_base_branch`, `ecr_repository_prefix`, and `image_registry` if needed
 
 ## `Service Endpoints`
 
