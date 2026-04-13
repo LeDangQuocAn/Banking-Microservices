@@ -58,10 +58,8 @@ resource "aws_elasticache_parameter_group" "main" {
 resource "random_password" "redis_auth" {
   length  = 32
   special = true
-  # ElastiCache AUTH token constraints (AWS API): must be 16-128 chars;
-  # cannot contain: , / " @ <space>. Bracket-type chars and ? are also
-  # rejected in practice - use a conservative safe set to avoid API errors.
-  override_special = "!#$%^&*_-+="
+  # Stick to the minimal safe set to guarantee no API rejection.
+  override_special = "!&#_-"
 }
 
 resource "aws_secretsmanager_secret" "redis" {
