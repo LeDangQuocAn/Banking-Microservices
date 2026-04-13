@@ -102,7 +102,8 @@ jobs:
                 ;;
             esac
 
-            values_file="banking-gitops/environments/${target_env}/${values_name}"
+            repo_values_file="environments/${target_env}/${values_name}"
+            values_file="banking-gitops/${repo_values_file}"
             if [[ ! -f "$values_file" ]]; then
               echo "Values file not found for ${service}: ${values_file}" >&2
               exit 1
@@ -152,8 +153,8 @@ jobs:
 
             mv "$tmp_file" "$values_file"
 
-            if ! git -C banking-gitops diff --quiet -- "$values_file"; then
-              changed_files+=("$values_file")
+            if ! git -C banking-gitops diff --quiet -- "$repo_values_file"; then
+              changed_files+=("$repo_values_file")
             fi
 
             printf '| %s | %s | %s | %s |\n' "$service" "$values_name" "$image_repo" "$IMAGE_TAG" >> "$summary_file"
