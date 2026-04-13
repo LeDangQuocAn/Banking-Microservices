@@ -7,6 +7,13 @@ on:
   pull_request:
     branches-ignore:
       - production
+  workflow_dispatch:
+    inputs:
+      force_gitops_handoff:
+        description: 'Run GitOps handoff without requiring main/master push'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   # OIDC auth to AWS requires id-token: write.
@@ -115,7 +122,9 @@ jobs:
     uses: ./.github/workflows/r-test-and-scan-code.yml
     needs:
       - detect-changes
-    if: needs.detect-changes.outputs.is_staging == 'true' || needs.detect-changes.outputs.any_service_changed == 'true'
+    # Rollback note (original):
+    # if: needs.detect-changes.outputs.is_staging == 'true' || needs.detect-changes.outputs.any_service_changed == 'true'
+    if: false # TEMP: handoff-only mode
     with:
       services_matrix: ${{ needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.full_services_matrix || needs.detect-changes.outputs.changed_services_matrix }}
     secrets: inherit
@@ -126,7 +135,9 @@ jobs:
     needs:
       - detect-changes
       - test-services
-    if: needs.detect-changes.outputs.is_staging == 'true'
+    # Rollback note (original):
+    # if: needs.detect-changes.outputs.is_staging == 'true'
+    if: false # TEMP: handoff-only mode
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
     secrets: inherit
@@ -137,7 +148,9 @@ jobs:
     needs:
       - detect-changes
       - integration-compose
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    # Rollback note (original):
+    # if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    if: false # TEMP: handoff-only mode
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       ref: ${{ github.ref }}
@@ -149,8 +162,21 @@ jobs:
     uses: ./.github/workflows/r-sync-gitops-values.yml
     needs:
       - detect-changes
-      - build-and-push-ecr
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    # Rollback note (original):
+    # if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    if: |
+      (
+        github.event_name == 'push' &&
+        (
+          needs.detect-changes.outputs.is_staging == 'true' ||
+          startsWith(github.ref_name, 'handoff/') ||
+          github.ref_name == 'feature/cicd-pipeline'
+        )
+      ) ||
+      (
+        github.event_name == 'workflow_dispatch' &&
+        inputs.force_gitops_handoff == true
+      )
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       image_tag: ${{ github.sha }}
