@@ -24,7 +24,7 @@ on:
       gitops_base_branch:
         description: 'GitOps base branch for pull requests'
         required: false
-        default: main
+        default: master
         type: string
       ecr_repository_prefix:
         description: 'ECR repository prefix used by CI workflows'
