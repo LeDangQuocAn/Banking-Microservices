@@ -120,6 +120,18 @@ jobs:
       services_matrix: ${{ needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.full_services_matrix || needs.detect-changes.outputs.changed_services_matrix }}
     secrets: inherit
 
+  build-and-scan-branch:
+    name: Build and Scan Branch Images
+    uses: ./.github/workflows/r-build-scan-push.yml
+    needs:
+      - detect-changes
+    if: github.event_name == 'push' && github.ref_name != 'main' && github.ref_name != 'production' && needs.detect-changes.outputs.any_service_changed == 'true'
+    with:
+      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
+      ref: ${{ github.ref }}
+      event_name: ${{ github.event_name }}
+    secrets: inherit
+
   integration-compose:
     name: Integration Test
     uses: ./.github/workflows/r-integration-test.yml
