@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) detect changes, 2) test services, 3) integration smoke test, 4) push staging images.
+  # 1) detect changes, 2) test services, 3) integration smoke test, 4) push staging images. 5) Promote images tag
 
   detect-changes:
     name: Detect Changed Services
@@ -156,4 +156,5 @@ jobs:
       image_tag: ${{ github.sha }}
       target_environment: staging
       gitops_repository: LeDangQuocAn/banking-gitops
+      handoff_strategy: push
     secrets: inherit
