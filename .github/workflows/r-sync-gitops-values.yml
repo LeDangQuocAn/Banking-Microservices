@@ -26,6 +26,11 @@ on:
         required: false
         default: master
         type: string
+      handoff_strategy:
+        description: 'GitOps handoff strategy: pr or push'
+        required: false
+        default: pr
+        type: string
       ecr_repository_prefix:
         description: 'ECR repository prefix used by CI workflows'
         required: false
@@ -54,7 +59,7 @@ jobs:
           token: ${{ secrets.GITOPS_PAT }}
           path: banking-gitops
 
-      - name: Update prod values files with promoted image tag
+      - name: Update environment values files with image tag
         id: sync
         env:
           SERVICES_MATRIX: ${{ inputs.services_matrix }}
@@ -173,18 +178,19 @@ jobs:
           fi
 
           cp "$summary_file" banking-gitops/promotion-summary.md
+          cp "$summary_file" "$RUNNER_TEMP/promotion-summary.md"
 
       - name: Create pull request in GitOps repository
         id: cpr
-        if: steps.sync.outputs.has_changes == 'true'
+        if: steps.sync.outputs.has_changes == 'true' && inputs.handoff_strategy != 'push'
         uses: peter-evans/create-pull-request@v6
         with:
           token: ${{ secrets.GITOPS_PAT }}
           path: banking-gitops
-          commit-message: "chore(gitops): sync prod image tags to ${{ inputs.image_tag }}"
-          title: "chore(gitops): sync prod image tags to ${{ inputs.image_tag }}"
+          commit-message: "chore(gitops): sync ${{ inputs.target_environment }} image tags to ${{ inputs.image_tag }}"
+          title: "chore(gitops): sync ${{ inputs.target_environment }} image tags to ${{ inputs.image_tag }}"
           body: |
-            This PR was created automatically after production image promotion.
+            This PR was created automatically by CI.
 
             - Environment: `${{ inputs.target_environment }}`
             - Image tag: `${{ inputs.image_tag }}`
@@ -200,14 +206,36 @@ jobs:
             gitops
             deployment
 
+      - name: Commit and push directly to GitOps base branch
+        if: steps.sync.outputs.has_changes == 'true' && inputs.handoff_strategy == 'push'
+        env:
+          TARGET_BRANCH: ${{ inputs.gitops_base_branch }}
+          TARGET_ENV: ${{ inputs.target_environment }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+        run: |
+          set -euo pipefail
+
+          git -C banking-gitops config user.name "github-actions[bot]"
+          git -C banking-gitops config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git -C banking-gitops add -A
+
+          if git -C banking-gitops diff --cached --quiet; then
+            echo "No staged changes to commit"
+            exit 0
+          fi
+
+          git -C banking-gitops commit -m "chore(gitops): sync ${TARGET_ENV} image tags to ${IMAGE_TAG}"
+          git -C banking-gitops push origin "HEAD:${TARGET_BRANCH}"
+
       - name: Upload sync summary artifact
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: gitops-sync-summary-${{ inputs.target_environment }}-${{ github.run_id }}
-          path: banking-gitops/promotion-summary.md
+          path: ${{ runner.temp }}/promotion-summary.md
 
       - name: Print PR URL
-        if: steps.cpr.outputs.pull-request-url != ''
+        if: inputs.handoff_strategy != 'push' && steps.cpr.outputs.pull-request-url != ''
         run: |
           echo "GitOps PR: ${{ steps.cpr.outputs.pull-request-url }}"
