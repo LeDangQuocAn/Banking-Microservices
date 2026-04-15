@@ -113,3 +113,30 @@ output "ecr_registry_id" {
   description = "AWS account ID owning the ECR registry — required for 'aws ecr get-login-password'."
 }
 # === End of ECR outputs ===
+
+# ===== IRSA outputs =====
+output "irsa_alb_controller_role_arn" {
+  value       = aws_iam_role.alb_controller.arn
+  description = "IRSA role ARN for the AWS Load Balancer Controller. Set as ALB_CONTROLLER_ROLE_ARN GitHub Variable."
+}
+
+output "irsa_vault_role_arn" {
+  value       = aws_iam_role.vault.arn
+  description = "IRSA role ARN for HashiCorp Vault auto-unseal. Set as VAULT_ROLE_ARN GitHub Variable."
+}
+
+output "irsa_vault_kms_key_arn" {
+  value       = aws_kms_key.vault_unseal.arn
+  description = "KMS CMK ARN for Vault auto-unseal. Pass as awsKmsKeyId in the Vault Helm values."
+}
+
+output "irsa_external_secrets_role_arn" {
+  value       = aws_iam_role.external_secrets.arn
+  description = "IRSA role ARN for External Secrets Operator. Set as EXTERNAL_SECRETS_ROLE_ARN GitHub Variable."
+}
+
+output "irsa_github_deploy_role_arn" {
+  value       = aws_iam_role.github_deploy.arn
+  description = "IRSA role ARN assumed by GitHub Actions jobs for kubectl/helm access. Set as EKS_DEPLOY_OIDC GitHub Secret."
+}
+# ===== End of IRSA outputs =====

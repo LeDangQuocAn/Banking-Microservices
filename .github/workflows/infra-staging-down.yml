@@ -1,0 +1,232 @@
+name: Staging — Teardown EKS CD Stack
+
+on:
+  workflow_dispatch:
+    inputs:
+      trigger_tf_destroy:
+        description: >
+          Also trigger Terraform Cloud destroy after EKS cleanup.
+          WARNING: This destroys EKS, VPC, RDS, ElastiCache and all related infra.
+        type: boolean
+        required: true
+        default: false
+
+# Prevent concurrent teardown/bootstrap runs.
+concurrency:
+  group: staging-infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # Required for OIDC token exchange with AWS
+  contents: read
+
+jobs:
+  teardown:
+    name: Teardown EKS CD Stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME_STAGING || 'banking-ms-staging' }}
+
+    steps:
+      # ── AWS Auth ─────────────────────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.EKS_DEPLOY_OIDC }}
+          role-session-name: infra-staging-down-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+
+      # ── Kubeconfig ───────────────────────────────────────────────────────────
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name "$CLUSTER_NAME" \
+            --region "$AWS_REGION"
+
+      # Capture VPC ID early — needed for ALB deletion polling later.
+      # Retrieved from EKS cluster metadata; not hardcoded as it changes each cycle.
+      - name: Capture VPC ID for ALB polling
+        run: |
+          VPC_ID=$(aws eks describe-cluster \
+            --name "$CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --query 'cluster.resourcesVpcConfig.vpcId' \
+            --output text)
+          echo "VPC_ID=$VPC_ID" >> "$GITHUB_ENV"
+          echo "Staging VPC: $VPC_ID"
+
+      # ── Step 1: Stop ArgoCD auto-sync ────────────────────────────────────────
+      # Patch all Applications to remove automated syncPolicy before deleting namespaces.
+      # This prevents ArgoCD from re-creating resources as we delete them.
+      - name: Stop ArgoCD auto-sync on all Applications
+        continue-on-error: true
+        run: |
+          kubectl get applications -n argocd -o name 2>/dev/null | while read -r app; do
+            echo "Removing syncPolicy from $app..."
+            kubectl patch "$app" -n argocd \
+              --type merge \
+              -p '{"spec":{"syncPolicy":null}}' 2>/dev/null || true
+          done
+
+      # ── Step 2: Delete application namespaces ────────────────────────────────
+      # Deleting banking and banking-infra first ensures Pods/Services are removed
+      # before, allowing the ALB controller to clean up ALB/TargetGroup resources.
+      - name: Delete microservice namespaces
+        continue-on-error: true
+        run: |
+          kubectl delete namespace banking \
+            --timeout=120s --ignore-not-found
+          kubectl delete namespace banking-infra \
+            --timeout=120s --ignore-not-found
+
+      # ── Step 3: Delete ArgoCD Applications ───────────────────────────────────
+      # Removes Application objects so ArgoCD stops reconciling after Helm uninstall.
+      - name: Delete all ArgoCD Applications
+        continue-on-error: true
+        run: |
+          kubectl delete applications --all -n argocd \
+            --timeout=60s 2>/dev/null || true
+
+      # ── Step 4: Uninstall ArgoCD ─────────────────────────────────────────────
+      - name: Uninstall ArgoCD
+        continue-on-error: true
+        run: |
+          helm uninstall argocd -n argocd --timeout=3m 2>/dev/null || true
+          kubectl delete namespace argocd \
+            --timeout=60s --ignore-not-found
+
+      # ── Step 5: Uninstall Vault ───────────────────────────────────────────────
+      # helm uninstall does NOT automatically delete PVCs (StatefulSet behaviour).
+      # Explicitly deleting PVCs triggers EBS CSI to delete the underlying EBS volume
+      # (StorageClass reclaimPolicy=Delete).
+      - name: Uninstall Vault and delete PVCs (EBS auto-deleted by CSI)
+        continue-on-error: true
+        run: |
+          helm uninstall vault -n vault --timeout=3m 2>/dev/null || true
+          kubectl delete pvc --all -n vault \
+            --timeout=60s 2>/dev/null || true
+          kubectl delete namespace vault \
+            --timeout=60s --ignore-not-found
+
+      # ── Step 6: Uninstall External Secrets Operator ───────────────────────────
+      - name: Uninstall External Secrets Operator
+        continue-on-error: true
+        run: |
+          helm uninstall external-secrets -n external-secrets \
+            --timeout=3m 2>/dev/null || true
+          kubectl delete namespace external-secrets \
+            --timeout=60s --ignore-not-found
+
+      # ── Step 7: Uninstall AWS Load Balancer Controller ────────────────────────
+      - name: Uninstall AWS Load Balancer Controller
+        continue-on-error: true
+        run: |
+          helm uninstall aws-load-balancer-controller -n kube-system \
+            --timeout=3m 2>/dev/null || true
+
+      # ── Step 8: CRITICAL — Wait for ALB deletion ──────────────────────────────
+      # The ALB controller deletes ALB/TargetGroup resources asynchronously after
+      # the controller pod is removed. Terraform CANNOT destroy the VPC while an
+      # ALB still exists inside it (AWS returns DependencyViolation).
+      # Poll every 15s for up to 6 minutes.
+      - name: Wait for all ALBs in VPC to be deleted
+        run: |
+          echo "Waiting for all ALBs in VPC $VPC_ID to be deleted..."
+          for i in $(seq 1 24); do
+            COUNT=$(aws elbv2 describe-load-balancers \
+              --region "$AWS_REGION" \
+              --query "LoadBalancers[?VpcId=='$VPC_ID'] | length(@)" \
+              --output text 2>/dev/null || echo "0")
+            echo "  ALBs remaining in VPC: $COUNT ($i/24)"
+            if [[ "$COUNT" == "0" ]]; then
+              echo "All ALBs deleted. VPC is safe to destroy."
+              break
+            fi
+            if [[ "$i" == "24" ]]; then
+              echo "WARNING: ALBs still present after timeout. Terraform destroy may fail."
+              echo "Check AWS console and manually delete any remaining load balancers."
+            fi
+            sleep 15
+          done
+
+      # ── Step 9 (optional): Trigger Terraform Cloud destroy ────────────────────
+      # Only runs when 'trigger_tf_destroy' input is true.
+      # Looks up the workspace by name, creates a destroy run, and polls until done.
+      - name: Trigger Terraform Cloud destroy
+        if: ${{ inputs.trigger_tf_destroy }}
+        env:
+          TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
+          TF_ORG: ${{ vars.TF_ORG }}
+          TF_WORKSPACE: ${{ vars.TF_WORKSPACE_STAGING }}
+        run: |
+          set -euo pipefail
+
+          echo "Resolving Terraform workspace: $TF_WORKSPACE in org: $TF_ORG..."
+          WORKSPACE_ID=$(curl -sf \
+            -H "Authorization: Bearer $TF_API_TOKEN" \
+            -H "Content-Type: application/vnd.api+json" \
+            "https://app.terraform.io/api/v2/organizations/${TF_ORG}/workspaces/${TF_WORKSPACE}" \
+            | jq -r '.data.id')
+          echo "Workspace ID: $WORKSPACE_ID"
+
+          echo "Creating destroy run (auto-apply=true)..."
+          RUN_ID=$(curl -sf \
+            -X POST \
+            -H "Authorization: Bearer $TF_API_TOKEN" \
+            -H "Content-Type: application/vnd.api+json" \
+            -d "$(jq -n \
+              --arg wid "$WORKSPACE_ID" \
+              '{data:{type:"runs",attributes:{"is-destroy":true,"auto-apply":true,
+                message:"Automated destroy via infra-staging-down.yml"},
+                relationships:{workspace:{data:{type:"workspaces",id:$wid}}}}}'
+            )" \
+            "https://app.terraform.io/api/v2/runs" \
+            | jq -r '.data.id')
+          echo "Run ID: $RUN_ID"
+          echo "Track progress at: https://app.terraform.io/app/$TF_ORG/workspaces/$TF_WORKSPACE/runs/$RUN_ID"
+
+          echo "Polling TF Cloud run status (up to 30 min)..."
+          for i in $(seq 1 60); do
+            STATUS=$(curl -sf \
+              -H "Authorization: Bearer $TF_API_TOKEN" \
+              "https://app.terraform.io/api/v2/runs/$RUN_ID" \
+              | jq -r '.data.attributes.status')
+            echo "  TF run status: $STATUS ($i/60)"
+            case "$STATUS" in
+              applied|apply_finished)
+                echo "Terraform destroy complete."
+                exit 0
+                ;;
+              errored|canceled|force_canceled|discarded)
+                echo "Terraform destroy failed with status: $STATUS"
+                echo "Check: https://app.terraform.io/app/$TF_ORG/workspaces/$TF_WORKSPACE/runs/$RUN_ID"
+                exit 1
+                ;;
+            esac
+            sleep 30
+          done
+
+          echo "ERROR: Terraform destroy run timed out after 30 minutes."
+          echo "Check: https://app.terraform.io/app/$TF_ORG/workspaces/$TF_WORKSPACE/runs/$RUN_ID"
+          exit 1
+
+      # ── Summary ───────────────────────────────────────────────────────────────
+      - name: Print teardown summary
+        if: always()
+        run: |
+          echo "========================================"
+          echo "  Staging EKS Teardown — Summary"
+          echo "========================================"
+          echo ""
+          echo "--- Remaining namespaces ---"
+          kubectl get namespaces 2>/dev/null | \
+            grep -E "argocd|vault|banking|external-secrets" \
+            || echo "All target namespaces removed."
+          echo ""
+          echo "--- Remaining ALBs in VPC $VPC_ID ---"
+          aws elbv2 describe-load-balancers \
+            --region "$AWS_REGION" \
+            --query "LoadBalancers[?VpcId=='$VPC_ID'].[LoadBalancerName,State.Code]" \
+            --output table 2>/dev/null || echo "(none)"
