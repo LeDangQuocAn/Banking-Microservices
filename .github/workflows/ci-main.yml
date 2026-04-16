@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1) detect changes, 2) test services, 3) integration smoke test, 4) push staging images.
+  # 1) detect changes, 2) test services, 3) integration smoke test, 4) push staging images. 5) Promote images tag
 
   detect-changes:
     name: Detect Changed Services
@@ -137,9 +137,9 @@ jobs:
     needs:
       - detect-changes
       - integration-compose
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
     with:
-      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
+      services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       ref: ${{ github.ref }}
       event_name: ${{ github.event_name }}
     secrets: inherit
@@ -150,10 +150,11 @@ jobs:
     needs:
       - detect-changes
       - build-and-push-ecr
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
     with:
-      services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
+      services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       image_tag: ${{ github.sha }}
       target_environment: staging
       gitops_repository: LeDangQuocAn/banking-gitops
+      handoff_strategy: push
     secrets: inherit
