@@ -30,16 +30,16 @@ data "aws_caller_identity" "irsa" {}
 # ==============================================================
 # GitHub Actions OIDC Provider
 # ==============================================================
-resource "aws_iam_openid_connect_provider" "github" {
-  url            = "https://token.actions.githubusercontent.com"
-  client_id_list = ["sts.amazonaws.com"]
-
-  thumbprint_list = [
-    "6938fd4d98bab03faadb97b34396831e3780aea1",
-    "1c58a3a8518e8759bf075b76b750d4f2df264fcd",
-  ]
-
-  tags = { Name = "github-actions-oidc-provider" }
+# This provider is account-global and is expected to already exist
+# (created by the ECR push role setup). Using a data source means
+# destroy/re-apply cycles do not delete it and break other pipelines.
+# If it truly does not exist yet, create it once manually:
+#   aws iam create-open-id-connect-provider \
+#     --url https://token.actions.githubusercontent.com \
+#     --client-id-list sts.amazonaws.com \
+#     --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
+data "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
 }
 # ===== End of GitHub OIDC Provider =====
 
@@ -418,19 +418,18 @@ data "aws_iam_policy_document" "github_deploy_assume_role" {
     effect = "Allow"
     principals {
       type        = "Federated"
-      identifiers = [aws_iam_openid_connect_provider.github.arn]
+      identifiers = [data.aws_iam_openid_connect_provider.github.arn]
     }
     actions = ["sts:AssumeRoleWithWebIdentity"]
 
-    # Restrict to jobs running from the main or master branch.
-    # StringLike allows the wildcard; replace * with the exact org/repo
-    # for the tightest possible scope.
+    # Restrict to workflows running from the main or master branch
+    # of the Banking-Microservices repository only.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
       values = [
-        "repo:*:ref:refs/heads/main",
-        "repo:*:ref:refs/heads/master",
+        "repo:LeDangQuocAn/Banking-Microservices:ref:refs/heads/main",
+        "repo:LeDangQuocAn/Banking-Microservices:ref:refs/heads/master",
       ]
     }
     condition {
