@@ -2,7 +2,7 @@
 set -euo pipefail
 
 EXPECTED_CONTEXT_PATTERN="${EXPECTED_CONTEXT_PATTERN:-staging}"
-ROOT_APP_URL="${ROOT_APP_URL:-https://raw.githubusercontent.com/<LeDangQuocAn>/banking-gitops/main/argocd/staging/root/root-application.yaml}"
+ROOT_APP_URL="${ROOT_APP_URL:-https://raw.githubusercontent.com/LeDangQuocAn/banking-gitops/master/argocd/staging/root/root-application.yaml}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 ARGOCD_RELEASE_NAME="${ARGOCD_RELEASE_NAME:-argocd}"
 ARGO_HELM_REPO_NAME="${ARGO_HELM_REPO_NAME:-argo}"
