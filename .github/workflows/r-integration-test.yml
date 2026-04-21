@@ -31,15 +31,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
-      POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'admin38' }}
+      POSTGRES_PASSWORD: ${{ vars.CI_POSTGRES_PASSWORD}}
       RABBITMQ_USER: admin
-      RABBITMQ_PASSWORD: ${{ secrets.CI_RABBITMQ_PASSWORD || 'admin38' }}
+      RABBITMQ_PASSWORD: ${{ vars.CI_RABBITMQ_PASSWORD}}
       MONGODB_USER: an
-      MONGODB_PASSWORD: ${{ secrets.CI_MONGODB_PASSWORD || 'an123' }}
-      PGADMIN_DEFAULT_EMAIL: ${{ secrets.CI_PGADMIN_EMAIL || 'pgadmin@example.com' }}
-      PGADMIN_DEFAULT_PASSWORD: ${{ secrets.CI_PGADMIN_PASSWORD || 'admin' }}
-      MONGO_EXPRESS_USER: ${{ secrets.CI_MONGO_EXPRESS_USER || 'admin' }}
-      MONGO_EXPRESS_PASSWORD: ${{ secrets.CI_MONGO_EXPRESS_PASSWORD || 'admin' }}
+      MONGODB_PASSWORD: ${{ vars.CI_MONGODB_PASSWORD}}
+      PGADMIN_DEFAULT_EMAIL: ${{ vars.CI_PGADMIN_EMAIL}}
+      PGADMIN_DEFAULT_PASSWORD: ${{ vars.CI_PGADMIN_PASSWORD}}
+      MONGO_EXPRESS_USER: ${{ vars.CI_MONGO_EXPRESS_USER }}
+      MONGO_EXPRESS_PASSWORD: ${{ vars.CI_MONGO_EXPRESS_PASSWORD }}
       ECR_REPOSITORY_PREFIX: ${{ vars.ECR_REPOSITORY_PREFIX || 'banking-microservices' }}
       ECR_ENVIRONMENT: ${{ vars.ECR_ENVIRONMENT || 'dev' }}
       ECR_SMOKE_TAG: ${{ vars.ECR_SMOKE_TAG || 'latest' }}

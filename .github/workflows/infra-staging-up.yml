@@ -1,0 +1,305 @@
+name: Staging — Bootstrap EKS CD Stack
+
+on:
+  workflow_dispatch:
+
+# Prevent concurrent bootstrap runs that could corrupt cluster state.
+concurrency:
+  group: staging-infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write   # Required for OIDC token exchange with AWS
+  contents: read
+
+jobs:
+  bootstrap:
+    name: Install CD Stack on EKS
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME_STAGING || 'banking-ms-staging' }}
+      GITOPS_REPO_URL: https://github.com/LeDangQuocAn/banking-gitops
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── AWS Auth via GitHub OIDC ─────────────────────────────────────────────
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.EKS_DEPLOY_OIDC }}
+          role-session-name: infra-staging-up-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+
+      # ── Kubeconfig ───────────────────────────────────────────────────────────
+      - name: Configure kubectl
+        run: |
+          aws eks update-kubeconfig \
+            --name "$CLUSTER_NAME" \
+            --region "$AWS_REGION"
+
+      - name: Wait for EKS nodes to be Ready
+        run: |
+          echo "Waiting up to 5 minutes for all nodes to be Ready..."
+          kubectl wait --for=condition=Ready nodes --all --timeout=300s
+          kubectl get nodes -o wide
+
+      # ── 1. AWS Load Balancer Controller ─────────────────────────────────────
+      # Watches Ingress/Service objects and manages AWS ALB/NLB resources.
+      # Must be installed before ArgoCD deploys any Ingress.
+      - name: Install AWS Load Balancer Controller
+        env:
+          ALB_ROLE_ARN: ${{ vars.ALB_CONTROLLER_ROLE_ARN }}
+        run: |
+          helm repo add eks https://aws.github.io/eks-charts --force-update
+          helm upgrade --install aws-load-balancer-controller \
+            eks/aws-load-balancer-controller \
+            --namespace kube-system \
+            --set clusterName="$CLUSTER_NAME" \
+            --set serviceAccount.create=true \
+            --set serviceAccount.name=aws-load-balancer-controller \
+            --set "serviceAccount.annotations.eks\.amazonaws\.com/role-arn=$ALB_ROLE_ARN" \
+            --wait --timeout=5m
+          kubectl rollout status deployment/aws-load-balancer-controller \
+            -n kube-system --timeout=120s
+
+      # ── 2. External Secrets Operator ─────────────────────────────────────────
+      # Reads from AWS Secrets Manager and syncs into K8s Secrets.
+      # Services can use ESO-managed secrets directly via K8s Secret references.
+      - name: Install External Secrets Operator
+        env:
+          ESO_ROLE_ARN: ${{ vars.EXTERNAL_SECRETS_ROLE_ARN }}
+        run: |
+          helm repo add external-secrets https://charts.external-secrets.io --force-update
+          helm upgrade --install external-secrets \
+            external-secrets/external-secrets \
+            --namespace external-secrets --create-namespace \
+            --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$ESO_ROLE_ARN" \
+            --wait --timeout=5m
+
+      # ── 3. HashiCorp Vault ───────────────────────────────────────────────────
+      # Uses dynamic PVC (gp2 StorageClass via EBS CSI) — EBS auto-created/deleted.
+      # KMS auto-unseal via the Vault IRSA role. Root token saved to Secrets Manager.
+      - name: Install Vault (dynamic PVC + KMS auto-unseal)
+        env:
+          VAULT_ROLE_ARN: ${{ vars.VAULT_ROLE_ARN }}
+          VAULT_KMS_KEY_ARN: ${{ vars.VAULT_KMS_KEY_ARN }}
+        run: |
+          helm repo add hashicorp https://helm.releases.hashicorp.com --force-update
+
+          # Write values to a temp file to avoid shell quoting complexity in --set-string.
+          cat > /tmp/vault-values.yaml << VAULT_EOF
+          server:
+            standalone:
+              enabled: true
+              config: |
+                ui = true
+                listener "tcp" {
+                  tls_disable     = 1
+                  address         = "[::]:8200"
+                  cluster_address = "[::]:8201"
+                }
+                storage "raft" {
+                  path = "/vault/data"
+                }
+                seal "awskms" {
+                  region     = "${AWS_REGION}"
+                  kms_key_id = "${VAULT_KMS_KEY_ARN}"
+                }
+            ha:
+              enabled: false
+            dataStorage:
+              enabled: true
+              size: 1Gi
+              storageClass: gp2
+            serviceAccount:
+              create: true
+              name: vault
+              annotations:
+                eks.amazonaws.com/role-arn: "${VAULT_ROLE_ARN}"
+            extraEnvironmentVars:
+              AWS_REGION: "${AWS_REGION}"
+            readinessProbe:
+              enabled: true
+              # Return 204 (success) when sealed/uninitialized so Helm --wait completes.
+              path: "/v1/sys/health?standbyok=true&sealedcode=204&uninitcode=204"
+            livenessProbe:
+              enabled: true
+              path: "/v1/sys/health?standbyok=true"
+              initialDelaySeconds: 60
+          injector:
+            enabled: true
+          VAULT_EOF
+
+          # sed strips the leading indentation added by the YAML heredoc.
+          sed -i 's/^          //' /tmp/vault-values.yaml
+
+          helm upgrade --install vault hashicorp/vault \
+            --namespace vault --create-namespace \
+            -f /tmp/vault-values.yaml \
+            --wait --timeout=5m
+
+      # ── Vault init ──────────────────────────────────────────────────────────
+      - name: Initialize Vault and save root token
+        run: |
+          set -euo pipefail
+
+          echo "Waiting for Vault pod to be reachable..."
+          for i in $(seq 1 24); do
+            RAW=$(kubectl exec vault-0 -n vault -- \
+              vault status -format=json 2>/dev/null || echo '{}')
+            INITIALIZED=$(echo "$RAW" | jq -r '.initialized // "unknown"')
+            if [[ "$INITIALIZED" != "unknown" ]]; then
+              echo "Vault is reachable. initialized=$INITIALIZED"
+              break
+            fi
+            echo "  Vault not yet reachable ($i/24) — retrying in 10s..."
+            sleep 10
+          done
+
+          if [[ "$INITIALIZED" == "true" ]]; then
+            echo "Vault already initialized — should not happen with dynamic PVC."
+            echo "Waiting for KMS auto-unseal..."
+            for i in $(seq 1 12); do
+              SEALED=$(kubectl exec vault-0 -n vault -- \
+                vault status -format=json 2>/dev/null | jq -r '.sealed // true')
+              if [[ "$SEALED" == "false" ]]; then
+                echo "Vault unsealed via KMS."
+                break
+              fi
+              echo "  Still sealed ($i/12) — waiting 10s..."
+              sleep 10
+            done
+            ROOT_TOKEN=$(aws secretsmanager get-secret-value \
+              --secret-id "banking-ms-staging/vault-root-token" \
+              --region "$AWS_REGION" \
+              --query 'SecretString' --output text)
+          else
+            echo "Running vault operator init (key-shares=1, KMS auto-unseal)..."
+            INIT_JSON=$(kubectl exec vault-0 -n vault -- \
+              vault operator init \
+                -key-shares=1 \
+                -key-threshold=1 \
+                -format=json)
+            ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
+
+            # Persist for debugging / manual operations. The token has full access.
+            aws secretsmanager create-secret \
+              --name "banking-ms-staging/vault-root-token" \
+              --secret-string "$ROOT_TOKEN" \
+              --region "$AWS_REGION" \
+              --description "Vault root token — staging cycle $(date +%Y-%m-%d)" \
+              2>/dev/null || \
+            aws secretsmanager put-secret-value \
+              --secret-id "banking-ms-staging/vault-root-token" \
+              --secret-string "$ROOT_TOKEN" \
+              --region "$AWS_REGION"
+            echo "Vault initialized and auto-unsealed via KMS."
+          fi
+
+          # Mask in logs and export for subsequent steps.
+          echo "::add-mask::$ROOT_TOKEN"
+          echo "VAULT_TOKEN=$ROOT_TOKEN" >> "$GITHUB_ENV"
+
+      # ── Vault configuration ──────────────────────────────────────────────────
+      - name: Configure Vault (Kubernetes auth + KV engine)
+        run: |
+          set -euo pipefail
+
+          # Enable Kubernetes auth. Vault uses the pod's own service account
+          # token and the in-cluster API server URL for token review.
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault auth enable kubernetes 2>/dev/null \
+             || echo 'Kubernetes auth already enabled'"
+
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault write auth/kubernetes/config \
+               kubernetes_host='https://kubernetes.default.svc:443'"
+
+          # Enable KV v2 secrets engine at banking/.
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault secrets enable -path=banking kv-v2 2>/dev/null \
+             || echo 'KV engine already enabled at banking/'"
+
+          echo "Vault configured: Kubernetes auth + KV v2 at banking/"
+
+      # ── Seed application secrets ─────────────────────────────────────────────
+      - name: Seed RDS and Redis credentials into Vault KV
+        run: |
+          set -euo pipefail
+
+          # ── RDS credentials ──────────────────────────────────────
+          # Secret format (set by modules/rds/main.tf):
+          #   { "username":"...", "password":"...", "engine":"postgres",
+          #     "host":"...", "port":5432, "dbname":"..." }
+          RDS_RAW=$(aws secretsmanager get-secret-value \
+            --secret-id "Banking-Microservices-Staging-rds-credentials" \
+            --region "$AWS_REGION" \
+            --query 'SecretString' --output text)
+
+          DB_USERNAME=$(echo "$RDS_RAW" | jq -r '.username')
+          DB_PASSWORD=$(echo "$RDS_RAW" | jq -r '.password')
+          DB_HOST=$(echo "$RDS_RAW"     | jq -r '.host')
+          DB_PORT=$(echo "$RDS_RAW"     | jq -r '.port')
+          DB_NAME=$(echo "$RDS_RAW"     | jq -r '.dbname')
+
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/rds \
+               username='$DB_USERNAME' \
+               password='$DB_PASSWORD' \
+               host='$DB_HOST' \
+               port='$DB_PORT' \
+               dbname='$DB_NAME'"
+          echo "Seeded banking/rds"
+
+          # ── Redis auth token ─────────────────────────────────────
+          # Secret format (set by modules/elasticache/main.tf):
+          #   { "auth_token":"...", "host":"...", "port":6379 }
+          REDIS_RAW=$(aws secretsmanager get-secret-value \
+            --secret-id "Banking-Microservices-Staging-redis-auth-token" \
+            --region "$AWS_REGION" \
+            --query 'SecretString' --output text)
+
+          REDIS_TOKEN=$(echo "$REDIS_RAW" | jq -r '.auth_token')
+          REDIS_HOST=$(echo "$REDIS_RAW"  | jq -r '.host')
+          REDIS_PORT=$(echo "$REDIS_RAW"  | jq -r '.port')
+
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/redis \
+               auth_token='$REDIS_TOKEN' \
+               host='$REDIS_HOST' \
+               port='$REDIS_PORT'"
+          echo "Seeded banking/redis"
+
+      # ── 5. App-of-Apps bootstrap (GitOps owns app deployment) ─────────────
+      - name: Bootstrap Root Application (App-of-Apps)
+        env:
+          EXPECTED_CONTEXT_PATTERN: staging
+          ROOT_APP_URL: https://raw.githubusercontent.com/LeDangQuocAn/banking-gitops/master/argocd/staging/root/root-application.yaml
+        run: |
+          chmod +x scripts/cluster-reviver.sh
+          scripts/cluster-reviver.sh
+
+      # ── Summary ──────────────────────────────────────────────────────────────
+      - name: Print cluster summary
+        if: always()
+        run: |
+          echo "========================================"
+          echo "  Staging EKS Bootstrap — Summary"
+          echo "========================================"
+          echo ""
+          echo "--- Nodes ---"
+          kubectl get nodes -o wide 2>/dev/null || echo "(kubectl unavailable)"
+          echo ""
+          echo "--- CD Components ---"
+          kubectl get pods -n kube-system \
+            -l app.kubernetes.io/name=aws-load-balancer-controller 2>/dev/null || true
+          kubectl get pods -n external-secrets 2>/dev/null || true
+          kubectl get pods -n vault 2>/dev/null || true
+          kubectl get pods -n argocd 2>/dev/null || true
+          echo ""
+          echo "--- ArgoCD Applications ---"
+          kubectl get applications -n argocd 2>/dev/null || true
