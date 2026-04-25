@@ -126,8 +126,8 @@ output "irsa_vault_role_arn" {
 }
 
 output "irsa_vault_kms_key_arn" {
-  value       = aws_kms_key.vault_unseal.arn
-  description = "KMS CMK ARN for Vault auto-unseal. Pass as awsKmsKeyId in the Vault Helm values."
+  value       = aws_kms_alias.vault_unseal.arn
+  description = "KMS alias ARN for Vault auto-unseal (alias/banking-microservices-staging-vault-unseal). Stable across destroy/re-apply cycles — the alias is recreated with the same name. Set as VAULT_KMS_KEY_ARN GitHub Variable."
 }
 
 output "irsa_external_secrets_role_arn" {

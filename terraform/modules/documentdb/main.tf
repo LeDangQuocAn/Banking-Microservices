@@ -27,8 +27,9 @@
 # ===== Locals =====
 locals {
   name_prefix = "${var.project}-${var.env}"
-  # DocumentDB parameter group families: docdb3.6 / docdb4.0 / docdb5.0
-  docdb_family = "docdb${var.engine_version}"
+  # Parameter group family uses major.minor only — "5.0.0" → "docdb5.0"
+  # AWS rejects the patch segment (e.g. "docdb5.0.0" is invalid).
+  docdb_family = "docdb${join(".", slice(split(".", var.engine_version), 0, 2))}"
 }
 # ===== End of Locals =====
 
