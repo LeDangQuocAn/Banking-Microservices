@@ -144,10 +144,19 @@ jobs:
             -f /tmp/vault-values.yaml \
             --wait --timeout=5m
 
+          echo "Waiting for StatefulSet/vault rollout..."
+          kubectl rollout status statefulset/vault -n vault --timeout=300s
+
+          echo "Waiting for pod/vault-0 to become Ready..."
+          kubectl wait --for=condition=Ready pod/vault-0 -n vault --timeout=300s
+
       # ── Vault init ──────────────────────────────────────────────────────────
       - name: Initialize Vault and save root token
         run: |
           set -euo pipefail
+
+          # Ensure the target pod is actually scheduled/running before kubectl exec.
+          kubectl wait --for=condition=Ready pod/vault-0 -n vault --timeout=300s
 
           echo "Waiting for Vault pod to be reachable..."
           for i in $(seq 1 24); do
@@ -161,6 +170,14 @@ jobs:
             echo "  Vault not yet reachable ($i/24) — retrying in 10s..."
             sleep 10
           done
+
+          if [[ "$INITIALIZED" == "unknown" ]]; then
+            echo "ERROR: Vault never became reachable after 240s."
+            kubectl get pods -n vault -o wide || true
+            kubectl describe pod vault-0 -n vault || true
+            kubectl get events -n vault --sort-by=.lastTimestamp | tail -n 50 || true
+            exit 1
+          fi
 
           if [[ "$INITIALIZED" == "true" ]]; then
             echo "Vault already initialized — should not happen with dynamic PVC."
