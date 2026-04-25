@@ -78,7 +78,9 @@ jobs:
             external-secrets/external-secrets \
             --namespace external-secrets --create-namespace \
             --set serviceAccount.annotations."eks\.amazonaws\.com/role-arn"="$ESO_ROLE_ARN" \
-            --wait --timeout=5m
+            --set webhook.create=false \
+            --set certController.create=false \
+            --wait --timeout=8m
 
       # ── 3. HashiCorp Vault ───────────────────────────────────────────────────
       # Uses dynamic PVC (gp2 StorageClass via EBS CSI) — EBS auto-created/deleted.

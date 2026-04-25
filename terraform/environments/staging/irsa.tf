@@ -468,3 +468,36 @@ resource "aws_iam_role_policy" "github_deploy_access" {
   })
 }
 # ===== End of GitHub Deploy IRSA =====
+
+# ==============================================================
+# EKS Access Entry — GitHub Actions Deploy Role
+# ==============================================================
+# Kubernetes RBAC has two layers:
+#   1. IAM authentication — STS token exchange (handled by the role above).
+#   2. Kubernetes authorisation — the IAM principal must be known to the
+#      EKS cluster. With authentication_mode=API_AND_CONFIG_MAP this is
+#      done via aws_eks_access_entry + aws_eks_access_policy_association
+#      rather than the legacy aws-auth ConfigMap.
+#
+# AmazonEKSClusterAdminPolicy = cluster-admin ClusterRoleBinding.
+# Needed so the workflow can: helm install, kubectl apply, kubectl exec, etc.
+resource "aws_eks_access_entry" "github_deploy" {
+  cluster_name  = var.cluster_name
+  principal_arn = aws_iam_role.github_deploy.arn
+  type          = "STANDARD"
+
+  tags = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
+}
+
+resource "aws_eks_access_policy_association" "github_deploy_admin" {
+  cluster_name  = var.cluster_name
+  principal_arn = aws_iam_role.github_deploy.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_deploy]
+}
+# ===== End of EKS Access Entry =====

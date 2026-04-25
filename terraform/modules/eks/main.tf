@@ -32,6 +32,19 @@ resource "aws_eks_cluster" "main" {
   version  = var.cluster_version
   role_arn = var.eks_cluster_role_arn
 
+  # API_AND_CONFIG_MAP enables both the EKS Access API (aws_eks_access_entry)
+  # and the legacy aws-auth ConfigMap simultaneously. This is a one-way
+  # in-place upgrade from CONFIG_MAP — no cluster replacement required.
+  # Required for aws_eks_access_entry resources in irsa.tf to work.
+  #
+  # bootstrap_cluster_creator_admin_permissions must be carried forward
+  # explicitly — omitting it causes Terraform to diff null vs true and
+  # force a cluster replacement.
+  access_config {
+    authentication_mode                         = "API_AND_CONFIG_MAP"
+    bootstrap_cluster_creator_admin_permissions = true
+  }
+
   vpc_config {
     # Pass both public and private subnet IDs so the control plane
     # can place ENIs in any AZ for cross-zone communication.

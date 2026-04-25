@@ -449,3 +449,27 @@ resource "aws_iam_role_policy" "github_deploy_access" {
   })
 }
 # ===== End of GitHub Deploy IRSA =====
+
+# ==============================================================
+# EKS Access Entry — GitHub Actions Deploy Role (Prod)
+# ==============================================================
+resource "aws_eks_access_entry" "github_deploy" {
+  cluster_name  = var.cluster_name
+  principal_arn = aws_iam_role.github_deploy.arn
+  type          = "STANDARD"
+
+  tags = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
+}
+
+resource "aws_eks_access_policy_association" "github_deploy_admin" {
+  cluster_name  = var.cluster_name
+  principal_arn = aws_iam_role.github_deploy.arn
+  policy_arn    = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+
+  access_scope {
+    type = "cluster"
+  }
+
+  depends_on = [aws_eks_access_entry.github_deploy]
+}
+# ===== End of EKS Access Entry =====
