@@ -423,7 +423,6 @@ data "aws_iam_policy_document" "github_deploy_assume_role" {
     actions = ["sts:AssumeRoleWithWebIdentity"]
 
     # Restrict to workflows running from the main or master branch
-    # of the Banking-Microservices repository only.
     condition {
       test     = "StringLike"
       variable = "token.actions.githubusercontent.com:sub"
