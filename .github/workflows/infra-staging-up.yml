@@ -90,7 +90,25 @@ jobs:
           VAULT_ROLE_ARN: ${{ vars.VAULT_ROLE_ARN }}
           VAULT_KMS_KEY_ARN: ${{ vars.VAULT_KMS_KEY_ARN }}
         run: |
+          set -euo pipefail
+
           helm repo add hashicorp https://helm.releases.hashicorp.com --force-update
+
+          # Prefer the cluster default StorageClass to avoid hardcoded gp2/gp3 mismatch.
+          VAULT_STORAGE_CLASS=$(kubectl get sc -o jsonpath="{range .items[?(@.metadata.annotations.storageclass\.kubernetes\.io/is-default-class==\"true\")]}{.metadata.name}{'\n'}{end}" | head -n1)
+          if [[ -z "${VAULT_STORAGE_CLASS}" ]]; then
+            # Fallback for clusters without a default annotation.
+            if kubectl get sc gp3 >/dev/null 2>&1; then
+              VAULT_STORAGE_CLASS="gp3"
+            elif kubectl get sc gp2 >/dev/null 2>&1; then
+              VAULT_STORAGE_CLASS="gp2"
+            else
+              echo "ERROR: No default StorageClass and neither gp3 nor gp2 exists."
+              kubectl get sc || true
+              exit 1
+            fi
+          fi
+          echo "Using Vault storageClass: ${VAULT_STORAGE_CLASS}"
 
           # Write values to a temp file to avoid shell quoting complexity in --set-string.
           cat > /tmp/vault-values.yaml << VAULT_EOF
@@ -116,7 +134,7 @@ jobs:
             dataStorage:
               enabled: true
               size: 1Gi
-              storageClass: gp2
+              storageClass: "${VAULT_STORAGE_CLASS}"
             serviceAccount:
               create: true
               name: vault
@@ -151,6 +169,13 @@ jobs:
               if [[ -n "$NODE_NAME" ]]; then
                 echo "vault-0 scheduled on node: $NODE_NAME"
                 break
+              fi
+
+              if (( i % 6 == 0 )); then
+                echo "  Diagnostic snapshot ($i/60):"
+                kubectl get pod vault-0 -n vault -o wide || true
+                kubectl get pvc -n vault || true
+                kubectl describe pod vault-0 -n vault | tail -n 30 || true
               fi
             fi
             echo "  vault-0 not scheduled yet ($i/60) — retrying in 5s..."
