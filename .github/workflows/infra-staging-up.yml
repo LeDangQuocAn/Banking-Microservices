@@ -144,18 +144,36 @@ jobs:
             -f /tmp/vault-values.yaml \
             --wait --timeout=5m
 
-          echo "Waiting for StatefulSet/vault rollout..."
-          kubectl rollout status statefulset/vault -n vault --timeout=300s
+          echo "Waiting for pod/vault-0 to be created and scheduled..."
+          for i in $(seq 1 60); do
+            if kubectl get pod vault-0 -n vault >/dev/null 2>&1; then
+              NODE_NAME=$(kubectl get pod vault-0 -n vault -o jsonpath='{.spec.nodeName}')
+              if [[ -n "$NODE_NAME" ]]; then
+                echo "vault-0 scheduled on node: $NODE_NAME"
+                break
+              fi
+            fi
+            echo "  vault-0 not scheduled yet ($i/60) — retrying in 5s..."
+            sleep 5
+          done
+
+          NODE_NAME=$(kubectl get pod vault-0 -n vault -o jsonpath='{.spec.nodeName}' 2>/dev/null || true)
+          if [[ -z "$NODE_NAME" ]]; then
+            echo "ERROR: vault-0 was not scheduled within timeout."
+            kubectl get pods -n vault -o wide || true
+            kubectl describe pod vault-0 -n vault || true
+            kubectl get events -n vault --sort-by=.lastTimestamp | tail -n 50 || true
+            exit 1
+          fi
 
           echo "Waiting for pod/vault-0 to become Ready..."
           kubectl wait --for=condition=Ready pod/vault-0 -n vault --timeout=300s
-
       # ── Vault init ──────────────────────────────────────────────────────────
       - name: Initialize Vault and save root token
         run: |
           set -euo pipefail
 
-          # Ensure the target pod is actually scheduled/running before kubectl exec.
+          # Re-check readiness before exec to avoid transient scheduling races.
           kubectl wait --for=condition=Ready pod/vault-0 -n vault --timeout=300s
 
           echo "Waiting for Vault pod to be reachable..."
