@@ -281,11 +281,9 @@ jobs:
               --region "$AWS_REGION" \
               --query 'SecretString' --output text)
           else
-            echo "Running vault operator init (key-shares=1, KMS auto-unseal)..."
+            echo "Running vault operator init (KMS auto-unseal)..."
             INIT_JSON=$(kubectl exec vault-0 -n vault -- \
               vault operator init \
-                -key-shares=1 \
-                -key-threshold=1 \
                 -format=json)
             ROOT_TOKEN=$(echo "$INIT_JSON" | jq -r '.root_token')
 

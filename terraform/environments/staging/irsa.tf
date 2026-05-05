@@ -487,6 +487,7 @@ resource "aws_eks_access_entry" "github_deploy" {
   type          = "STANDARD"
 
   tags = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
+  depends_on = [module.eks]
 }
 
 resource "aws_eks_access_policy_association" "github_deploy_admin" {
@@ -498,6 +499,6 @@ resource "aws_eks_access_policy_association" "github_deploy_admin" {
     type = "cluster"
   }
 
-  depends_on = [aws_eks_access_entry.github_deploy]
+  depends_on = [aws_eks_access_entry.github_deploy, module.eks]
 }
 # ===== End of EKS Access Entry =====
