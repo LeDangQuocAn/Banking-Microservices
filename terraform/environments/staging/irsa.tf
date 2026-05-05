@@ -28,7 +28,7 @@ locals {
 data "aws_caller_identity" "irsa" {}
 
 # ==============================================================
-# GitHub Actions OIDC Provider
+# GitHub Actions OIDC Providerr
 # ==============================================================
 # This provider is account-global and is expected to already exist
 # (created by the ECR push role setup). Using a data source means
