@@ -42,14 +42,11 @@ jobs:
           echo "--- eks describe-cluster (status) ---"
           aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --query cluster.status --output text || true
 
+          echo "--- eks access entries ---"
+          aws eks list-access-entries --cluster-name "$CLUSTER_NAME" --region "$AWS_REGION" --query 'accessEntries[].principalArn' --output text || true
+
           echo "--- aws eks get-token ---"
           aws eks get-token --cluster-name "$CLUSTER_NAME" --region "$AWS_REGION" || true
-
-          echo "--- kubectl config (minified) ---"
-          kubectl config view --minify || true
-
-          echo "--- kubectl get nodes ---"
-          kubectl get nodes -o wide || true
 
       # ── Kubeconfig ───────────────────────────────────────────────────────────
       - name: Configure kubectl
@@ -57,6 +54,17 @@ jobs:
           aws eks update-kubeconfig \
             --name "$CLUSTER_NAME" \
             --region "$AWS_REGION"
+
+      - name: Verify kubectl auth
+        run: |
+          echo "--- kubectl config current-context ---"
+          kubectl config current-context || true
+
+          echo "--- kubectl auth can-i get nodes ---"
+          kubectl auth can-i get nodes || true
+
+          echo "--- kubectl get nodes (pre-wait) ---"
+          kubectl get nodes -o wide || true
 
       - name: Wait for EKS nodes to be Ready
         run: |
