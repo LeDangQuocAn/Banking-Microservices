@@ -34,6 +34,23 @@ jobs:
           role-session-name: infra-staging-up-${{ github.run_id }}
           aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
 
+      - name: Debug AWS identity and EKS token
+        run: |
+          echo "--- aws sts get-caller-identity ---"
+          aws sts get-caller-identity || true
+
+          echo "--- eks describe-cluster (status) ---"
+          aws eks describe-cluster --name "$CLUSTER_NAME" --region "$AWS_REGION" --query cluster.status --output text || true
+
+          echo "--- aws eks get-token ---"
+          aws eks get-token --cluster-name "$CLUSTER_NAME" --region "$AWS_REGION" || true
+
+          echo "--- kubectl config (minified) ---"
+          kubectl config view --minify || true
+
+          echo "--- kubectl get nodes ---"
+          kubectl get nodes -o wide || true
+
       # ── Kubeconfig ───────────────────────────────────────────────────────────
       - name: Configure kubectl
         run: |
