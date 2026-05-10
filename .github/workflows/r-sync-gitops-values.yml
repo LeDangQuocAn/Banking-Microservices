@@ -78,6 +78,10 @@ jobs:
           repo_prefix="$(sanitize "$ECR_REPO_PREFIX")"
           image_registry="${IMAGE_REGISTRY%/}"
 
+          if [[ -z "$image_registry" ]]; then
+            image_registry="141571819416.dkr.ecr.ap-southeast-1.amazonaws.com"
+          fi
+
           if [[ -z "$IMAGE_TAG" ]]; then
             echo "image_tag input cannot be empty" >&2
             exit 1
@@ -115,11 +119,7 @@ jobs:
             fi
 
             image_repo_name="${repo_prefix}-${target_env}-${service}"
-            if [[ -n "$image_registry" ]]; then
-              image_repo="${image_registry}/${image_repo_name}"
-            else
-              image_repo="$image_repo_name"
-            fi
+            image_repo="${image_registry}/${image_repo_name}"
 
             tmp_file="${values_file}.tmp"
             awk -v repo="$image_repo" -v tag="$IMAGE_TAG" '
