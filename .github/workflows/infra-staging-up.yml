@@ -326,7 +326,8 @@ jobs:
              || echo 'KV engine already enabled at banking/'"
 
           # Create a least-privilege policy and Kubernetes auth role for ESO.
-          cat > /tmp/external-secrets-policy.hcl <<'EOF'
+          kubectl exec -i vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault policy write external-secrets -" <<'EOF'
           path "banking/data/*" {
             capabilities = ["read"]
           }
@@ -335,9 +336,6 @@ jobs:
             capabilities = ["read", "list"]
           }
           EOF
-
-          kubectl exec vault-0 -n vault -- sh -c \
-            "VAULT_TOKEN=$VAULT_TOKEN vault policy write external-secrets /tmp/external-secrets-policy.hcl"
 
           kubectl exec vault-0 -n vault -- sh -c \
             "VAULT_TOKEN=$VAULT_TOKEN vault write auth/kubernetes/role/external-secrets \
