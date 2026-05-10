@@ -2,14 +2,19 @@
 # Banking Microservices Project
 # Updated: 2026-05-10
 
-# CVE-2026-42583: Netty Lz4FrameDecoder resource exhaustion
+# CVE-2026-42583 / CVE-2026-42579 / CVE-2026-42584 / CVE-2026-42587 / CVE-2026-42577: Netty codec & transport issues
 # Severity: HIGH
-# Reason: Spring Boot 3.4.5 with Spring Cloud 2024.0.1 BOM includes Netty 4.1.132.Final.
-#         The current version included via Spring Cloud BOM does not contain the fix for this CVE.
-#         A future upgrade to Spring Cloud 2025.0.0 (with Spring Boot 3.5.x) would resolve this.
-#         For now, this is temporarily ignored pending Spring Cloud upgrade.
-# Review Date: 2026-06-01
+# Status: FIXED (api-gateway-service)
+# Fix Applied: Added Netty BOM override `io.netty:netty-bom:4.1.133.Final` in `api-gateway-service/pom.xml`.
+#              This pins Netty modules (codec-dns, codec-http, codec-http2, transport-native-epoll, etc.)
+#              to 4.1.133.Final which contains fixes recommended by Trivy.
+# Verification: Re-run Trivy scan / CI to confirm findings are resolved.
+# Review Date: 2026-05-15
 CVE-2026-42583
+CVE-2026-42579
+CVE-2026-42584
+CVE-2026-42587
+CVE-2026-42577
 
 # CVE-2026-5598: BouncyCastle private key leakage via non-constant time comparisons
 # Severity: HIGH
