@@ -394,6 +394,15 @@ jobs:
                port='$REDIS_PORT'"
           echo "Seeded banking/redis"
 
+          # ── RabbitMQ credentials ──────────────────────────────────
+          # Generate a random secure password for RabbitMQ
+          RABBITMQ_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/rabbitmq \
+               rabbitmq-password='$RABBITMQ_PASSWORD'"
+          echo "Seeded banking/rabbitmq"
+
       # ── 5. App-of-Apps bootstrap (GitOps owns app deployment) ─────────────
       - name: Bootstrap Root Application (App-of-Apps)
         env:
