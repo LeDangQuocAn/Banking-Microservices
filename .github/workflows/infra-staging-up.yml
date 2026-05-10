@@ -394,6 +394,32 @@ jobs:
                port='$REDIS_PORT'"
           echo "Seeded banking/redis"
 
+          # ── DocumentDB credentials ───────────────────────────────
+          # Secret format (set by modules/documentdb/main.tf):
+          #   { "username":"...", "password":"...", "engine":"mongo",
+          #     "host":"...", "port":27017, "dbname":"logs" }
+          DOCDB_RAW=$(aws secretsmanager get-secret-value \
+            --secret-id "Banking-Microservices-Staging-docdb-credentials" \
+            --region "$AWS_REGION" \
+            --query 'SecretString' --output text)
+
+          DOCDB_USERNAME=$(echo "$DOCDB_RAW" | jq -r '.username')
+          DOCDB_PASSWORD=$(echo "$DOCDB_RAW" | jq -r '.password')
+          DOCDB_ENGINE=$(echo "$DOCDB_RAW"   | jq -r '.engine')
+          DOCDB_HOST=$(echo "$DOCDB_RAW"     | jq -r '.host')
+          DOCDB_PORT=$(echo "$DOCDB_RAW"     | jq -r '.port')
+          DOCDB_DBNAME=$(echo "$DOCDB_RAW"   | jq -r '.dbname')
+
+          kubectl exec vault-0 -n vault -- sh -c \
+            "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/docdb \
+               username='$DOCDB_USERNAME' \
+               password='$DOCDB_PASSWORD' \
+               engine='$DOCDB_ENGINE' \
+               host='$DOCDB_HOST' \
+               port='$DOCDB_PORT' \
+               dbname='$DOCDB_DBNAME'"
+          echo "Seeded banking/docdb"
+
           # ── RabbitMQ credentials ──────────────────────────────────
           # Generate a random secure password for RabbitMQ
           RABBITMQ_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
