@@ -5,7 +5,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.4.5</version>
+        <version>3.5.14</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>unaldi</groupId>
@@ -19,7 +19,7 @@
         <spring-cloud-gateway.version>4.2.6</spring-cloud-gateway.version>
         <spring-framework.version>6.2.11</spring-framework.version>
         <tomcat.version>10.1.54</tomcat.version>
-        <netty.version>4.1.132.Final</netty.version>
+        <netty.version>4.1.133.Final</netty.version>
         <xstream.version>1.4.21</xstream.version>
     </properties>
     <dependencies>

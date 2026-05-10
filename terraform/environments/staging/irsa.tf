@@ -467,6 +467,39 @@ resource "aws_iam_role_policy" "github_deploy_access" {
     }]
   })
 }
+
+resource "aws_iam_role_policy" "github_deploy_secrets_access" {
+  name = "secrets-manager-access"
+  role = aws_iam_role.github_deploy.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Sid    = "SecretsManagerAccess"
+      Effect = "Allow"
+      Action = [
+        "secretsmanager:CreateSecret",
+        "secretsmanager:PutSecretValue",
+        "secretsmanager:UpdateSecret",
+        "secretsmanager:DescribeSecret",
+        "secretsmanager:GetSecretValue",
+      ]
+      # Scoped to Vault root token and staging database credentials.
+      Resource = [
+        "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.irsa.account_id}:secret:banking-ms-staging/*",
+        "arn:aws:secretsmanager:${var.aws_region}:${data.aws_caller_identity.irsa.account_id}:secret:Banking-Microservices-Staging-*",
+      ]
+    }, {
+      Sid    = "SecretsManagerKMSDecrypt"
+      Effect = "Allow"
+      Action = [
+        "kms:Decrypt",
+        "kms:DescribeKey",
+      ]
+      Resource = ["*"]
+    }]
+  })
+}
 # ===== End of GitHub Deploy IRSA =====
 
 # ==============================================================
@@ -486,7 +519,7 @@ resource "aws_eks_access_entry" "github_deploy" {
   principal_arn = aws_iam_role.github_deploy.arn
   type          = "STANDARD"
 
-  tags = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
+  tags       = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
   depends_on = [module.eks]
 }
 
