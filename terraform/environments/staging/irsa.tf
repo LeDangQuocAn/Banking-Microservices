@@ -211,6 +211,7 @@ data "aws_iam_policy_document" "alb_controller" {
       "elasticloadbalancing:SetSecurityGroups",
       "elasticloadbalancing:SetSubnets",
       "elasticloadbalancing:SetWebAcl",
+      "elasticloadbalancing:DescribeListenerAttributes",
     ]
     resources = ["*"]
   }

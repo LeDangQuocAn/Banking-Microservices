@@ -8,6 +8,13 @@ on:
     branches-ignore:
       - production
 
+  workflow_dispatch:
+    inputs:
+      fast_mode:
+        description: 'Fast Mode: Skip tests/Sonar and ONLY build & push to ECR'
+        required: false
+        default: false
+        type: boolean
 permissions:
   # OIDC auth to AWS requires id-token: write.
   contents: read
@@ -115,7 +122,7 @@ jobs:
     uses: ./.github/workflows/r-test-and-scan-code.yml
     needs:
       - detect-changes
-    if: needs.detect-changes.outputs.is_staging == 'true' || needs.detect-changes.outputs.any_service_changed == 'true'
+    if: ${{ !inputs.fast_mode && (needs.detect-changes.outputs.is_staging == 'true' || needs.detect-changes.outputs.any_service_changed == 'true') }}
     with:
       services_matrix: ${{ needs.detect-changes.outputs.is_staging == 'true' && needs.detect-changes.outputs.full_services_matrix || needs.detect-changes.outputs.changed_services_matrix }}
     secrets: inherit
@@ -126,7 +133,7 @@ jobs:
     needs:
       - detect-changes
       - test-services
-    if: needs.detect-changes.outputs.is_staging == 'true'
+    if: ${{ !inputs.fast_mode && needs.detect-changes.outputs.is_staging == 'true' }}
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
     secrets: inherit
@@ -137,7 +144,7 @@ jobs:
     needs:
       - detect-changes
       - integration-compose
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    if: always() && github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && (needs.integration-compose.result == 'success' || needs.integration-compose.result == 'skipped' || inputs.fast_mode)
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       ref: ${{ github.ref }}
