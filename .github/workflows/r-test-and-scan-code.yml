@@ -89,6 +89,7 @@ jobs:
     env:
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
+      POSTGRES_DB: banking-microservices
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${{ secrets.CI_POSTGRES_PASSWORD || 'admin38' }}
       REDIS_HOST: localhost
