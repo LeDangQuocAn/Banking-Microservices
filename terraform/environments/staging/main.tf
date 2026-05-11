@@ -83,7 +83,7 @@ module "rds" {
 
   # Engine
   engine_version = var.rds_engine_version
-  db_name        = var.rds_db_name
+  db_name        = "bankingmicroservices"
   db_username    = var.rds_db_username
 
   # Sizing
