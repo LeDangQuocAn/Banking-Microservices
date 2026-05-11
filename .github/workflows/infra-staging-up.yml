@@ -26,6 +26,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.8
+
       # ── AWS Auth via GitHub OIDC ─────────────────────────────────────────────
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -54,6 +59,31 @@ jobs:
           aws eks update-kubeconfig \
             --name "$CLUSTER_NAME" \
             --region "$AWS_REGION"
+
+      - name: Load RDS credentials from Terraform outputs
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          terraform -chdir=terraform/environments/staging init -input=false
+
+          RDS_USERNAME=$(terraform -chdir=terraform/environments/staging output -raw rds_db_username)
+          RDS_PASSWORD=$(terraform -chdir=terraform/environments/staging output -raw rds_db_password)
+          RDS_HOST=$(terraform -chdir=terraform/environments/staging output -raw rds_db_address)
+          RDS_PORT=$(terraform -chdir=terraform/environments/staging output -raw rds_db_port)
+          RDS_DBNAME=$(terraform -chdir=terraform/environments/staging output -raw rds_db_name)
+
+          echo "::add-mask::$RDS_USERNAME"
+          echo "::add-mask::$RDS_PASSWORD"
+
+          {
+            echo "RDS_USERNAME=$RDS_USERNAME"
+            echo "RDS_PASSWORD=$RDS_PASSWORD"
+            echo "RDS_HOST=$RDS_HOST"
+            echo "RDS_PORT=$RDS_PORT"
+            echo "RDS_DBNAME=$RDS_DBNAME"
+          } >> "$GITHUB_ENV"
 
       - name: Verify kubectl auth
         run: |
@@ -351,28 +381,13 @@ jobs:
         run: |
           set -euo pipefail
 
-          # ── RDS credentials ──────────────────────────────────────
-          # Secret format (set by modules/rds/main.tf):
-          #   { "username":"...", "password":"...", "engine":"postgres",
-          #     "host":"...", "port":5432, "dbname":"..." }
-          RDS_RAW=$(aws secretsmanager get-secret-value \
-            --secret-id "Banking-Microservices-Staging-rds-credentials" \
-            --region "$AWS_REGION" \
-            --query 'SecretString' --output text)
-
-          DB_USERNAME=$(echo "$RDS_RAW" | jq -r '.username')
-          DB_PASSWORD=$(echo "$RDS_RAW" | jq -r '.password')
-          DB_HOST=$(echo "$RDS_RAW"     | jq -r '.host')
-          DB_PORT=$(echo "$RDS_RAW"     | jq -r '.port')
-          DB_NAME=$(echo "$RDS_RAW"     | jq -r '.dbname')
-
           kubectl exec vault-0 -n vault -- sh -c \
             "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/rds \
-               username='$DB_USERNAME' \
-               password='$DB_PASSWORD' \
-               host='$DB_HOST' \
-               port='$DB_PORT' \
-               dbname='$DB_NAME'"
+               username='$RDS_USERNAME' \
+               password='$RDS_PASSWORD' \
+               host='$RDS_HOST' \
+               port='$RDS_PORT' \
+               dbname='$RDS_DBNAME'"
           echo "Seeded banking/rds"
 
           # ── Redis auth token ─────────────────────────────────────

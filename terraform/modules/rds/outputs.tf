@@ -12,6 +12,17 @@ output "db_endpoint" {
   value       = aws_db_instance.main.endpoint
 }
 
+output "db_username" {
+  description = "Master username for the RDS PostgreSQL instance."
+  value       = var.db_username
+}
+
+output "db_password" {
+  description = "Master password for the RDS PostgreSQL instance."
+  value       = random_password.rds_master.result
+  sensitive   = true
+}
+
 output "db_address" {
   description = "Hostname of the RDS PostgreSQL instance without the port suffix."
   value       = aws_db_instance.main.address

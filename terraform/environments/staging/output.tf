@@ -71,6 +71,32 @@ output "rds_endpoint" {
   description = "RDS PostgreSQL connection endpoint (host:port)."
 }
 
+output "rds_db_username" {
+  value       = module.rds.db_username
+  description = "RDS master username used by the staging applications."
+}
+
+output "rds_db_password" {
+  value       = module.rds.db_password
+  description = "RDS master password used by the staging applications."
+  sensitive   = true
+}
+
+output "rds_db_address" {
+  value       = module.rds.db_address
+  description = "RDS hostname without port suffix."
+}
+
+output "rds_db_port" {
+  value       = module.rds.db_port
+  description = "RDS PostgreSQL port."
+}
+
+output "rds_db_name" {
+  value       = module.rds.db_name
+  description = "Initial RDS database name."
+}
+
 output "rds_secret_arn" {
   value       = module.rds.db_secret_arn
   description = "Secrets Manager ARN for RDS master credentials — grant GetSecretValue to application pods."
