@@ -150,7 +150,7 @@ jobs:
     needs:
       - detect-changes
       - integration-compose
-    if: always() && github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true' && (needs.integration-compose.result == 'success' || needs.integration-compose.result == 'skipped' || inputs.fast_mode)
+    if: (github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true') || inputs.fast_mode
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       ref: ${{ github.ref }}
@@ -163,7 +163,7 @@ jobs:
     needs:
       - detect-changes
       - build-and-push-ecr
-    if: github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true'
+    if: (github.event_name == 'push' && needs.detect-changes.outputs.is_staging == 'true') || inputs.fast_mode
     with:
       services_matrix: ${{ needs.detect-changes.outputs.full_services_matrix }}
       image_tag: ${{ github.sha }}
