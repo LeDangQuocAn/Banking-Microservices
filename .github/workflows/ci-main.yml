@@ -94,21 +94,27 @@ jobs:
           [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
 
           target_branch="${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}"
+          fast_mode="${{ inputs.fast_mode || false }}"
 
-          if [[ "$target_branch" == "main" || "$target_branch" == "master" ]]; then
+          if [[ "$fast_mode" == "true" ]]; then
+            # Fast Mode: always build all services
             target_environment="staging"
             full_matrix_json="$(printf '%s\n' "${services_all[@]}" | jq -R . | jq -sc .)"
+            any_service_changed=true
+          elif [[ "$target_branch" == "main" || "$target_branch" == "master" ]]; then
+            target_environment="staging"
+            full_matrix_json="$(printf '%s\n' "${services_all[@]}" | jq -R . | jq -sc .)"
+            any_service_changed=$([[ ${#services[@]} -gt 0 ]] && echo true || echo false)
           else
             target_environment="dev"
             full_matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
+            any_service_changed=$([[ ${#services[@]} -gt 0 ]] && echo true || echo false)
           fi
 
           if [[ ${#services[@]} -eq 0 ]]; then
             changed_matrix_json='[]'
-            any_service_changed=false
           else
             changed_matrix_json="$(printf '%s\n' "${services[@]}" | jq -R . | jq -sc .)"
-            any_service_changed=true
           fi
 
           echo "changed_services_matrix=$changed_matrix_json" >> "$GITHUB_OUTPUT"
