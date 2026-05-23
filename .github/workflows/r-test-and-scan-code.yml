@@ -18,6 +18,9 @@ on:
       SONAR_TOKEN:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   secret-scan:
     name: Gitleaks Secret Scan
@@ -28,6 +31,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ github.token }}
 
       - name: Run Gitleaks scan
         run: |
@@ -119,6 +123,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4

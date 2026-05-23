@@ -19,6 +19,9 @@ on:
       ECR_OIDC:
         required: true
 
+permissions:
+  contents: read
+
 jobs:
   build-and-push-ecr:
     name: Build and Push Image (${{ matrix.service }})
@@ -31,6 +34,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ github.token }}
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
