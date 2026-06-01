@@ -140,11 +140,43 @@ jobs:
       - name: Run tests
         run: ./mvnw -B verify
 
+      - name: Check Sonar configuration
+        id: sonar-precheck
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_ORG: ${{ vars.SONAR_ORGANIZATION }}
+        run: |
+          if [[ -z "${SONAR_TOKEN:-}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=SONAR_TOKEN is missing (common on fork PRs)." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [[ -z "${SONAR_ORG:-}" ]]; then
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "reason=SONAR_ORGANIZATION repo variable is missing." >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          auth_json="$(curl -sS -u "${SONAR_TOKEN}:" "https://sonarcloud.io/api/authentication/validate")"
+          if [[ "$auth_json" != *'"valid":true'* ]]; then
+            echo "SonarCloud token validation failed. Response: $auth_json"
+            exit 1
+          fi
+
+          echo "enabled=true" >> "$GITHUB_OUTPUT"
+          echo "reason=ok" >> "$GITHUB_OUTPUT"
+
+      - name: Skip SonarCloud analysis
+        if: steps.sonar-precheck.outputs.enabled != 'true'
+        run: echo "Skipping SonarCloud analysis: ${{ steps.sonar-precheck.outputs.reason }}"
+
       - name: SonarCloud analysis
+        if: steps.sonar-precheck.outputs.enabled == 'true'
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          ./mvnw -B sonar:sonar \
+          ./mvnw -B org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.projectKey=${{ vars.SONAR_ORGANIZATION }}_${{ matrix.service }} \
             -Dsonar.organization=${{ vars.SONAR_ORGANIZATION }} \
             -Dsonar.host.url=https://sonarcloud.io \
