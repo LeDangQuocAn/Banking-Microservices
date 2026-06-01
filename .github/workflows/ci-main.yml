@@ -2,8 +2,9 @@ name: CI Main
 
 on:
   push:
-    branches-ignore:
-      - production
+    branches:
+      - main
+      - master
   pull_request:
     branches-ignore:
       - production
