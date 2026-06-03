@@ -123,6 +123,16 @@ jobs:
           kubectl rollout status deployment/aws-load-balancer-controller \
             -n kube-system --timeout=120s
 
+      # ── 1.5 Metrics Server ──────────────────────────────────────────────────
+      # Provides CPU/Memory metrics to the Kubernetes API. Required for HPA.
+      - name: Install Metrics Server
+        run: |
+          helm repo add metrics-server https://kubernetes-sigs.github.io/metrics-server/ --force-update
+          helm upgrade --install metrics-server metrics-server/metrics-server \
+            --namespace kube-system \
+            --set args={--kubelet-insecure-tls} \
+            --wait --timeout=5m
+      
       # ── 2. External Secrets Operator ─────────────────────────────────────────
       # Reads from AWS Secrets Manager and syncs into K8s Secrets.
       # Services can use ESO-managed secrets directly via K8s Secret references.
@@ -445,6 +455,27 @@ jobs:
             "VAULT_TOKEN=$VAULT_TOKEN vault kv put banking/rabbitmq \
                rabbitmq-password='$RABBITMQ_PASSWORD'"
           echo "Seeded banking/rabbitmq"
+
+      - name: Seed Slack Webhook to Vault
+        run: |
+          set -euo pipefail
+
+          WEBHOOK_JSON=$(aws secretsmanager get-secret-value \
+            --secret-id "Banking-Microservices-Staging-slack-webhook" \
+            --region "$AWS_REGION" \
+            --query 'SecretString' --output text)
+
+          if ! WEBHOOK_URL=$(printf '%s' "$WEBHOOK_JSON" | jq -er '.webhook_url // empty'); then
+            echo "ERROR: Secret Banking-Microservices-Staging-slack-webhook does not contain webhook_url."
+            exit 1
+          fi
+
+          echo "::add-mask::$WEBHOOK_URL"
+
+          kubectl exec -i vault-0 -n vault -- sh -c '
+            VAULT_TOKEN="$1" vault kv put banking/slack webhook_url="$(cat)"
+          ' sh "$VAULT_TOKEN" <<< "$WEBHOOK_URL"
+          echo "Seeded banking/slack"
 
       # ── 5. App-of-Apps bootstrap (GitOps owns app deployment) ─────────────
       - name: Bootstrap Root Application (App-of-Apps)
