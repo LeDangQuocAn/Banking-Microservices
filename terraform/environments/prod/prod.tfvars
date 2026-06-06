@@ -12,7 +12,7 @@ cluster_name         = "banking-ms-prod"
 # ===== EKS =====
 cluster_version                      = "1.34"
 cluster_endpoint_public_access_cidrs = ["0.0.0.0/0"] # TODO: restrict to VPN/office CIDR before go-live
-node_instance_type                   = "t3.medium"   # Cost-optimised for DevSecOps project; upgrade to t3.large for real production workloads
+node_instance_type                   = "t3.large"    # Higher ENI/pod capacity for the production microservices + observability stack
 node_disk_size_gb                    = 50
 node_desired_size                    = 2
 node_min_size                        = 2

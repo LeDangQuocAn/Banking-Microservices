@@ -97,6 +97,8 @@ resource "aws_secretsmanager_secret_version" "mq" {
     engine       = "rabbitmq"
     host         = replace(replace(local.mq_endpoints[0], "amqps://", ""), ":5671", "")
     port         = 5671
+    uri          = local.mq_endpoints[0]
+    ssl_enabled  = "true"
     endpoint_url = local.mq_endpoints[0]
     endpoints    = local.mq_endpoints
   })
