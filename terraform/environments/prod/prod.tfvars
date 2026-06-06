@@ -50,7 +50,7 @@ elasticache_secret_recovery_window_days = 0 # Academic simulation: immediate sec
 
 # ===== Amazon MQ =====
 amazon_mq_engine_version              = "3.13"
-amazon_mq_host_instance_type          = "mq.t3.micro"
+amazon_mq_host_instance_type          = "mq.m7g.medium"
 amazon_mq_secret_recovery_window_days = 0
 # ===== End of Amazon MQ =====
 

@@ -42,7 +42,7 @@ on:
         default: ''
         type: string
     secrets:
-      GITOPS_PAT:
+      GITOPS_PR_TOKEN:
         required: true
 
 jobs:
@@ -56,7 +56,7 @@ jobs:
         with:
           repository: ${{ inputs.gitops_repository }}
           ref: ${{ inputs.gitops_base_branch }}
-          token: ${{ secrets.GITOPS_PAT }}
+          token: ${{ secrets.GITOPS_PR_TOKEN }}
           path: banking-gitops
 
       - name: Update environment values files with image tag
@@ -185,7 +185,7 @@ jobs:
         if: steps.sync.outputs.has_changes == 'true' && inputs.handoff_strategy != 'push'
         uses: peter-evans/create-pull-request@v6
         with:
-          token: ${{ secrets.GITOPS_PAT }}
+          token: ${{ secrets.GITOPS_PR_TOKEN }}
           path: banking-gitops
           commit-message: "chore(gitops): sync ${{ inputs.target_environment }} image tags to ${{ inputs.image_tag }}"
           title: "Deploy ${{ inputs.target_environment }} services to Production: ${{ inputs.image_tag }}"

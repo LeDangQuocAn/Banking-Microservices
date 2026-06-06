@@ -6,9 +6,9 @@ on:
       - production
     types:
       - closed
-
 permissions:
   contents: read
+  pull-requests: write
   id-token: write
 
 concurrency:
