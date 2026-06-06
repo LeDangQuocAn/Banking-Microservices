@@ -70,11 +70,13 @@ jobs:
           source_repo="${repo_prefix}-${source_env}-${service_name}"
           target_repo="${repo_prefix}-${target_env}-${service_name}"
 
-          if aws ecr batch-get-image \
+          target_image_tag="$(aws ecr batch-get-image \
             --repository-name "$target_repo" \
             --image-ids imageTag="$SOURCE_IMAGE_TAG" \
             --query 'images[0].imageId.imageTag' \
-            --output text >/dev/null 2>&1; then
+            --output text 2>/dev/null || true)"
+
+          if [[ "$target_image_tag" == "$SOURCE_IMAGE_TAG" ]]; then
             echo "${target_repo}:${SOURCE_IMAGE_TAG} already exists; skipping"
             exit 0
           fi
@@ -83,7 +85,12 @@ jobs:
             --repository-name "$source_repo" \
             --image-ids imageTag="$SOURCE_IMAGE_TAG" \
             --query 'images[0].imageManifest' \
-            --output text)"
+            --output text 2>/dev/null || true)"
+
+          if [[ -z "$manifest" || "$manifest" == "None" ]]; then
+            echo "Source image not found: ${source_repo}:${SOURCE_IMAGE_TAG}" >&2
+            exit 1
+          fi
 
           aws ecr put-image \
             --repository-name "$target_repo" \
