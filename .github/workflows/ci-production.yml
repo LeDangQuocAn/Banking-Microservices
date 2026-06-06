@@ -59,16 +59,31 @@ jobs:
         run: |
           set -euo pipefail
 
+          services_all=(
+            account-service
+            api-gateway-service
+            bank-service
+            credit-card-service
+            discovery-client-service
+            invoice-service
+            log-service
+            user-service
+          )
+
           services=()
 
-          [[ "${{ steps.changes.outputs.account-service }}" == "true" ]] && services+=("account-service")
-          [[ "${{ steps.changes.outputs.api-gateway-service }}" == "true" ]] && services+=("api-gateway-service")
-          [[ "${{ steps.changes.outputs.bank-service }}" == "true" ]] && services+=("bank-service")
-          [[ "${{ steps.changes.outputs.credit-card-service }}" == "true" ]] && services+=("credit-card-service")
-          [[ "${{ steps.changes.outputs.discovery-client-service }}" == "true" ]] && services+=("discovery-client-service")
-          [[ "${{ steps.changes.outputs.invoice-service }}" == "true" ]] && services+=("invoice-service")
-          [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
-          [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
+          if [[ "${{ steps.changes.outputs.integration }}" == "true" ]]; then
+            services=("${services_all[@]}")
+          else
+            [[ "${{ steps.changes.outputs.account-service }}" == "true" ]] && services+=("account-service")
+            [[ "${{ steps.changes.outputs.api-gateway-service }}" == "true" ]] && services+=("api-gateway-service")
+            [[ "${{ steps.changes.outputs.bank-service }}" == "true" ]] && services+=("bank-service")
+            [[ "${{ steps.changes.outputs.credit-card-service }}" == "true" ]] && services+=("credit-card-service")
+            [[ "${{ steps.changes.outputs.discovery-client-service }}" == "true" ]] && services+=("discovery-client-service")
+            [[ "${{ steps.changes.outputs.invoice-service }}" == "true" ]] && services+=("invoice-service")
+            [[ "${{ steps.changes.outputs.log-service }}" == "true" ]] && services+=("log-service")
+            [[ "${{ steps.changes.outputs.user-service }}" == "true" ]] && services+=("user-service")
+          fi
 
           if [[ ${#services[@]} -eq 0 ]]; then
             echo "changed_services_matrix=[]" >> "$GITHUB_OUTPUT"
