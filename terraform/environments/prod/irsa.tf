@@ -387,6 +387,19 @@ resource "aws_iam_role_policy" "external_secrets_access" {
         Effect   = "Allow"
         Action   = ["secretsmanager:ListSecrets"]
         Resource = ["*"]
+      },
+      {
+        Sid    = "DecryptSecretKmsKeysForESO"
+        Effect = "Allow"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey",
+        ]
+        Resource = [
+          module.security.rds_kms_key_arn,
+          module.security.documentdb_kms_key_arn,
+          module.security.elasticache_kms_key_arn,
+        ]
       }
     ]
   })
