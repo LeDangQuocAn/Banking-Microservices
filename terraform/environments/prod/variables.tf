@@ -184,12 +184,38 @@ variable "elasticache_automatic_failover_enabled" {
   default     = false
 }
 
+variable "elasticache_snapshot_retention_limit" {
+  description = "Number of days to retain Redis snapshots. 0 disables snapshots for academic destroyability."
+  type        = number
+  default     = 0
+}
+
 variable "elasticache_secret_recovery_window_days" {
   description = "Days Secrets Manager waits before permanently deleting the ElastiCache secret on destroy. 0 for Dev, 7 for Prod."
   type        = number
   default     = 7
 }
 # ===== End of ElastiCache module variables =====
+
+# ===== Amazon MQ module variables =====
+variable "amazon_mq_engine_version" {
+  description = "RabbitMQ engine version for Amazon MQ."
+  type        = string
+  default     = "3.13"
+}
+
+variable "amazon_mq_host_instance_type" {
+  description = "Amazon MQ broker instance type."
+  type        = string
+  default     = "mq.t3.micro"
+}
+
+variable "amazon_mq_secret_recovery_window_days" {
+  description = "Days Secrets Manager waits before permanently deleting the Amazon MQ secret. 0 for academic destroyability."
+  type        = number
+  default     = 0
+}
+# ===== End of Amazon MQ module variables =====
 
 # ===== ECR module variables =====
 variable "ecr_image_tag_mutability" {

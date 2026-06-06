@@ -65,6 +65,12 @@ variable "automatic_failover_enabled" {
   default     = false
 }
 
+variable "apply_immediately" {
+  description = "Apply Redis replication group modifications immediately instead of waiting for the maintenance window."
+  type        = bool
+  default     = false
+}
+
 variable "snapshot_retention_limit" {
   description = "Number of days to retain daily snapshots. 0 disables snapshots."
   type        = number

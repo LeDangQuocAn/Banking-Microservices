@@ -27,7 +27,7 @@
 
 # ===== Locals =====
 locals {
-  name_prefix  = "${var.project}-${var.env}"
+  name_prefix = "${var.project}-${var.env}"
   # Extract major version for parameter group family: "7.1" → "redis7"
   redis_family = "redis${split(".", var.engine_version)[0]}"
 }
@@ -113,6 +113,7 @@ resource "aws_elasticache_replication_group" "main" {
   # multi_az_enabled must match automatic_failover_enabled; both require >= 2 nodes.
   automatic_failover_enabled = var.automatic_failover_enabled
   multi_az_enabled           = var.automatic_failover_enabled
+  apply_immediately          = var.apply_immediately
 
   # Snapshots
   snapshot_retention_limit = var.snapshot_retention_limit
