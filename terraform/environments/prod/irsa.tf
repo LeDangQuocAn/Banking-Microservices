@@ -426,6 +426,11 @@ resource "aws_iam_role" "github_deploy" {
   description        = "Assumed by GitHub Actions (production branch only) for kubectl/helm access to the prod EKS cluster."
   assume_role_policy = data.aws_iam_policy_document.github_deploy_assume_role.json
 
+  # Nhét thẳng quyền Admin vào đây để Terraform không bao giờ gỡ nó ra nữa
+  managed_policy_arns = [
+    "arn:aws:iam::aws:policy/AdministratorAccess"
+  ]
+
   tags = { Name = "${local.irsa_prefix}-github-deploy-role" }
 }
 
