@@ -85,7 +85,7 @@ jobs:
     uses: ./.github/workflows/r-promote-ecr-image.yml
     needs:
       - detect-changes
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: github.event.pull_request.merged == true && (github.event.pull_request.head.ref == 'main' || github.event.pull_request.head.ref == 'master') && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
       services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
       source_environment: staging
@@ -99,7 +99,7 @@ jobs:
     needs:
       - detect-changes
       - promote-images
-    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
+    if: github.event.pull_request.merged == true && (github.event.pull_request.head.ref == 'main' || github.event.pull_request.head.ref == 'master') && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
       services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
       image_tag: ${{ github.event.pull_request.head.sha }}
