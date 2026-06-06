@@ -1,0 +1,132 @@
+name: Production - Teardown EKS CD Stack
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: prod-infra
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  teardown:
+    name: Teardown Prod CD Stack and Destroy Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+      CLUSTER_NAME: ${{ vars.EKS_CLUSTER_NAME_PROD || 'banking-ms-prod' }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.14.8
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.PROD_INFRA_OIDC }}
+          role-session-name: infra-prod-down-${{ github.run_id }}
+          aws-region: ${{ vars.AWS_REGION || 'ap-southeast-1' }}
+
+      - name: Configure kubectl
+        continue-on-error: true
+        run: |
+          aws eks update-kubeconfig \
+            --name "$CLUSTER_NAME" \
+            --region "$AWS_REGION"
+
+      - name: Capture VPC ID for ALB polling
+        run: |
+          VPC_ID=$(aws eks describe-cluster \
+            --name "$CLUSTER_NAME" \
+            --region "$AWS_REGION" \
+            --query 'cluster.resourcesVpcConfig.vpcId' \
+            --output text)
+          echo "VPC_ID=$VPC_ID" >> "$GITHUB_ENV"
+          echo "Prod VPC: $VPC_ID"
+
+      - name: Stop ArgoCD auto-sync
+        continue-on-error: true
+        run: |
+          kubectl get applications -n argocd -o name 2>/dev/null | while read -r app; do
+            kubectl patch "$app" -n argocd \
+              --type merge \
+              -p '{"spec":{"syncPolicy":null}}' 2>/dev/null || true
+          done
+
+      - name: Delete production ArgoCD root app and workloads
+        continue-on-error: true
+        run: |
+          kubectl delete application banking-prod-root -n argocd --timeout=120s 2>/dev/null || true
+          kubectl delete applications --all -n argocd --timeout=120s 2>/dev/null || true
+          kubectl delete namespace banking-prod --timeout=180s --ignore-not-found
+          kubectl delete namespace banking-infra-prod --timeout=180s --ignore-not-found
+
+      - name: Uninstall ArgoCD
+        continue-on-error: true
+        run: |
+          helm uninstall argocd -n argocd --timeout=3m 2>/dev/null || true
+          kubectl delete namespace argocd --timeout=120s --ignore-not-found
+
+      - name: Uninstall External Secrets Operator
+        continue-on-error: true
+        run: |
+          helm uninstall external-secrets -n external-secrets --timeout=3m 2>/dev/null || true
+          kubectl delete namespace external-secrets --timeout=120s --ignore-not-found
+
+      - name: Uninstall AWS Load Balancer Controller
+        continue-on-error: true
+        run: |
+          helm uninstall aws-load-balancer-controller -n kube-system --timeout=3m 2>/dev/null || true
+
+      - name: Wait for all ALBs in VPC to be deleted
+        run: |
+          echo "Waiting for all ALBs in VPC $VPC_ID to be deleted..."
+          for i in $(seq 1 40); do
+            COUNT=$(aws elbv2 describe-load-balancers \
+              --region "$AWS_REGION" \
+              --query "LoadBalancers[?VpcId=='$VPC_ID'] | length(@)" \
+              --output text 2>/dev/null || echo "0")
+            echo "  ALBs remaining in VPC: $COUNT ($i/40)"
+            if [[ "$COUNT" == "0" ]]; then
+              echo "All ALBs deleted. VPC is safe to destroy."
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "ERROR: ALBs still present after timeout. Refusing terraform destroy."
+          aws elbv2 describe-load-balancers \
+            --region "$AWS_REGION" \
+            --query "LoadBalancers[?VpcId=='$VPC_ID'].[LoadBalancerName,DNSName,State.Code]" \
+            --output table
+          exit 1
+
+      - name: Terraform destroy production foundation
+        env:
+          TF_TOKEN_app_terraform_io: ${{ secrets.TF_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          terraform -chdir=terraform/environments/prod init -input=false
+          terraform -chdir=terraform/environments/prod destroy \
+            -var-file=prod.tfvars \
+            -auto-approve \
+            -input=false
+
+      - name: Print production teardown summary
+        if: always()
+        run: |
+          echo "--- Remaining target namespaces ---"
+          kubectl get namespaces 2>/dev/null | grep -E "argocd|banking-prod|banking-infra-prod|external-secrets" || true
+          echo "--- Remaining ALBs in VPC $VPC_ID ---"
+          aws elbv2 describe-load-balancers \
+            --region "$AWS_REGION" \
+            --query "LoadBalancers[?VpcId=='$VPC_ID'].[LoadBalancerName,State.Code]" \
+            --output table 2>/dev/null || true

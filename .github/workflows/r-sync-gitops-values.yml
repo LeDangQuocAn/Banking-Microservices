@@ -188,12 +188,13 @@ jobs:
           token: ${{ secrets.GITOPS_PAT }}
           path: banking-gitops
           commit-message: "chore(gitops): sync ${{ inputs.target_environment }} image tags to ${{ inputs.image_tag }}"
-          title: "chore(gitops): sync ${{ inputs.target_environment }} image tags to ${{ inputs.image_tag }}"
+          title: "Deploy ${{ inputs.target_environment }} services to Production: ${{ inputs.image_tag }}"
           body: |
             This PR was created automatically by CI.
 
             - Environment: `${{ inputs.target_environment }}`
             - Image tag: `${{ inputs.image_tag }}`
+            - Target branch: `${{ inputs.gitops_base_branch }}`
             - Source workflow: `${{ github.workflow }}`
             - Source run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
 
