@@ -1,4 +1,4 @@
-﻿# === VPC outputs ===
+# === VPC outputs ===
 output "vpc_id" {
   value       = module.vpc.vpc_id
   description = "ID of the Prod VPC."
@@ -100,6 +100,28 @@ output "redis_secret_arn" {
   description = "Secrets Manager ARN for the Redis AUTH token."
 }
 # === End of ElastiCache outputs ===
+
+# === Amazon MQ outputs ===
+output "amazon_mq_broker_id" {
+  value       = module.amazon_mq.broker_id
+  description = "Amazon MQ RabbitMQ broker ID."
+}
+
+output "amazon_mq_broker_arn" {
+  value       = module.amazon_mq.broker_arn
+  description = "Amazon MQ RabbitMQ broker ARN."
+}
+
+output "amazon_mq_endpoint_url" {
+  value       = module.amazon_mq.endpoint_url
+  description = "Primary AMQPS endpoint URL for the Amazon MQ RabbitMQ broker."
+}
+
+output "amazon_mq_secret_arn" {
+  value       = module.amazon_mq.secret_arn
+  description = "Secrets Manager ARN for Amazon MQ RabbitMQ credentials and endpoint metadata."
+}
+# === End of Amazon MQ outputs ===
 
 # === ECR outputs ===
 output "ecr_repository_urls" {

@@ -1,4 +1,4 @@
-﻿# ===== VPC =====
+# ===== VPC =====
 module "vpc" {
   source = "../../modules/vpc"
 
@@ -85,11 +85,11 @@ module "rds" {
   instance_class    = var.rds_instance_class
   allocated_storage = var.rds_allocated_storage
 
-  # Availability / Durability
-  multi_az              = var.rds_multi_az
+  # Academic prod simulation: HA semantics, but fully destroyable.
+  multi_az              = true
   backup_retention_days = var.rds_backup_retention_days
-  skip_final_snapshot   = var.rds_skip_final_snapshot
-  deletion_protection   = var.rds_deletion_protection
+  skip_final_snapshot   = true
+  deletion_protection   = false
 
   # Secrets Manager
   secret_recovery_window_days = var.rds_secret_recovery_window_days
@@ -119,6 +119,10 @@ module "documentdb" {
   instance_class = var.docdb_instance_class
   instance_count = var.docdb_instance_count
 
+  # Academic prod simulation: clean terraform destroy, no retained snapshots.
+  skip_final_snapshot = true
+  deletion_protection = false
+
   # Secrets Manager
   secret_recovery_window_days = var.docdb_secret_recovery_window_days
 
@@ -147,6 +151,8 @@ module "elasticache" {
   node_type                  = var.elasticache_node_type
   num_cache_nodes            = var.elasticache_num_cache_nodes
   automatic_failover_enabled = var.elasticache_automatic_failover_enabled
+  apply_immediately          = true
+  snapshot_retention_limit   = var.elasticache_snapshot_retention_limit
 
   # Secrets Manager
   secret_recovery_window_days = var.elasticache_secret_recovery_window_days
@@ -154,6 +160,32 @@ module "elasticache" {
   depends_on = [module.security]
 }
 # ===== End of ElastiCache =====
+
+# ===== Amazon MQ (RabbitMQ-compatible broker) =====
+module "amazon_mq" {
+  source = "../../modules/amazon_mq"
+
+  project = "Banking-Microservices"
+  env     = "Prod"
+
+  # Networking
+  vpc_id             = module.vpc.vpc_id
+  private_subnet_ids = module.vpc.private_subnet_ids
+
+  # Security
+  eks_node_sg_id = module.security.eks_node_sg_id
+  kms_key_arn    = module.security.elasticache_kms_key_arn
+
+  # Engine / sizing
+  engine_version     = var.amazon_mq_engine_version
+  host_instance_type = var.amazon_mq_host_instance_type
+
+  # Secrets Manager
+  secret_recovery_window_days = var.amazon_mq_secret_recovery_window_days
+
+  depends_on = [module.security]
+}
+# ===== End of Amazon MQ =====
 
 # ===== ECR (private container registries) =====
 # service_names defaults to all 8 microservices defined in the module.

@@ -105,5 +105,6 @@ jobs:
       image_tag: ${{ github.event.pull_request.head.sha }}
       target_environment: prod
       gitops_repository: LeDangQuocAn/banking-gitops
+      gitops_base_branch: production
       handoff_strategy: pr
     secrets: inherit
