@@ -458,6 +458,8 @@ resource "aws_eks_access_entry" "github_deploy" {
   principal_arn = aws_iam_role.github_deploy.arn
   type          = "STANDARD"
 
+  depends_on = [module.eks]
+
   tags = { Name = "${local.irsa_prefix}-github-deploy-access-entry" }
 }
 

@@ -3,7 +3,7 @@
 #
 # Academic production simulation:
 #   - ACTIVE_STANDBY_MULTI_AZ for HA semantics.
-#   - mq.t3.micro by default to keep costs bounded.
+#   - mq.m7g.medium by default to keep costs bounded.
 #   - No prevent_destroy/deletion protection so terraform destroy is clean.
 # ==============================================================
 
@@ -57,9 +57,9 @@ resource "aws_mq_broker" "main" {
   engine_type        = "RabbitMQ"
   engine_version     = var.engine_version
   host_instance_type = var.host_instance_type
-  deployment_mode    = "ACTIVE_STANDBY_MULTI_AZ"
+  deployment_mode    = "SINGLE_INSTANCE"
 
-  subnet_ids          = var.private_subnet_ids
+  subnet_ids          = [var.private_subnet_ids[0]]
   security_groups     = [aws_security_group.main.id]
   publicly_accessible = false
   apply_immediately   = true
