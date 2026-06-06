@@ -207,7 +207,7 @@ variable "amazon_mq_engine_version" {
 variable "amazon_mq_host_instance_type" {
   description = "Amazon MQ broker instance type."
   type        = string
-  default     = "mq.t3.micro"
+  default     = "mq.m7g.medium"
 }
 
 variable "amazon_mq_secret_recovery_window_days" {
