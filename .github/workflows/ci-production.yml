@@ -1,9 +1,6 @@
 name: CI Production
 
 on:
-  push:
-    branches:
-      - production
   pull_request:
     branches:
       - production
@@ -88,19 +85,12 @@ jobs:
     uses: ./.github/workflows/r-promote-ecr-image.yml
     needs:
       - detect-changes
-    # Original production gate:
-    # if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
-    if: >-
-      needs.detect-changes.outputs.any_service_changed == 'true' &&
-      (
-        github.event_name == 'push' ||
-        (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main')
-      )
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
       services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
       source_environment: staging
       target_environment: prod
-      source_image_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      source_image_tag: ${{ github.event.pull_request.head.sha }}
     secrets: inherit
 
   sync-gitops-values:
@@ -109,17 +99,10 @@ jobs:
     needs:
       - detect-changes
       - promote-images
-    # Original production gate:
-    # if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
-    if: >-
-      needs.detect-changes.outputs.any_service_changed == 'true' &&
-      (
-        github.event_name == 'push' ||
-        (github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main')
-      )
+    if: github.event.pull_request.merged == true && github.event.pull_request.head.ref == 'main' && needs.detect-changes.outputs.any_service_changed == 'true'
     with:
       services_matrix: ${{ needs.detect-changes.outputs.changed_services_matrix }}
-      image_tag: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+      image_tag: ${{ github.event.pull_request.head.sha }}
       target_environment: prod
       gitops_repository: LeDangQuocAn/banking-gitops
       gitops_base_branch: production
