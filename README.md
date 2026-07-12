@@ -1,198 +1,87 @@
-# `Banking-Microservices`
+# 🏦 DevSecOps Banking Microservices: Infrastructure & CI/CD Pipeline
 
-## `Contents`
-- [Introduction](#Introduction)
-- [Software Architecture](#software-architecture)
-- [Database Entity Relationships](#database-entity-relationships)
-- [Technology Stack](#technology-stack)
-- [Build and Run Project](#build-and-run-project)
-- [Production Promotion Handoff](#production-promotion-handoff)
-- [Service Endpoints](#service-endpoints)
+![AWS](https://img.shields.io/badge/AWS-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)
+![Terraform](https://img.shields.io/badge/terraform-%235835CC.svg?style=for-the-badge&logo=terraform&logoColor=white)
+![GitHub Actions](https://img.shields.io/badge/github%20actions-%232671E5.svg?style=for-the-badge&logo=githubactions&logoColor=white)
+![Docker](https://img.shields.io/badge/docker-%230db7ed.svg?style=for-the-badge&logo=docker&logoColor=white)
+![Security](https://img.shields.io/badge/Security-Shift--Left-red)
 
-## `Introduction`
-> This backend project was bootstrapped with [Java Spring Boot](https://spring.io)
+> **Note:** For details regarding the application architecture, microservices logic, and API interactions, please refer to the [Application Documentation (README_APP.md)](./README_APP.md).
+>
+> For Continuous Deployment (ArgoCD) and Observability (PLG stack) configurations, visit the companion GitOps repository: [banking-gitops](link-to-your-gitops-repo).
 
-> This backend project was designed and developed to stand up services that simulate basic banking
-> transactions and use them as a whole
+This repository contains the **Infrastructure as Code (IaC)** and **Continuous Integration (CI)** implementations for a highly available, event-driven banking application deployed on Amazon Web Services (AWS). It demonstrates a complete, automated DevSecOps lifecycle with a strong emphasis on security, FinOps, and scalable cloud architecture.
 
-> This backend project was developed using microservice architecture, a distributed approach to building
-> software systems. In microservice architecture, the application is divided into multiple loosely coupled
-> services, each tasked with different functions. These services communicate with each other via HTTP
-> requests and message queues
+---
 
-## `Software Architecture`
-![software-architecture-design](./documentation/software-architecture-design-dark.png)
-**Components that make up the architecture of the project:**
+## 🏗️ Cloud Infrastructure (Terraform)
 
-### Discovery Client Service
-* The discovery server, implemented using Eureka, is responsible for service discovery and registration. 
-It allows services to locate and communicate with each other without prior knowledge of network topology.
-* This service can be accessed from port **[8761]**
+The infrastructure is entirely provisioned using **Terraform**, modularized for reusability, and managed centrally via **HCP Terraform** to ensure state locking and secure variable management.
 
-### Api Gateway Service
-* The API gateway, implemented using Spring Cloud Gateway, acts as a single entry point for clients to 
-access various microservices. It provides routing, filtering, and load balancing functionalities, 
-making it easier to manage and secure the system's API's.
-* This service can be accessed on port **[8087]**
+### Architecture Highlights
+* **VPC & Networking:** A strict 4-subnet topology across 2 Availability Zones (Multi-AZ). The EKS compute nodes and all databases are completely isolated in **Private Subnets** to minimize the attack surface.
+* **Compute (Amazon EKS):** Managed Node Groups running Kubernetes.
+* **AWS Managed Databases:** To prevent data loss during pod crashes, all stateful workloads are offloaded to AWS managed services:
+  * **Amazon RDS (PostgreSQL):** Core relational database for transactional integrity (ACID).
+  * **Amazon ElastiCache (Redis):** Distributed session caching.
+  * **Amazon DocumentDB:** MongoDB-compatible store for unstructured audit logs.
+  * **Amazon MQ:** Message broker handling asynchronous logging.
 
-### User Service
-* This service handles user transactions in the microservice application.
-* This service can be accessed from port **[8081]**
+### 💰 FinOps & Environment Parity Strategies
+The infrastructure is dynamically adapted based on the environment to balance Cost Optimization (Staging) and Fault Tolerance (Production):
 
-### Bank Service
-* This service handles bank transactions in the microservice application.
-* This service can be accessed from port **[8082]**
+| Component | Staging (FinOps Optimized) | Production (High Availability) |
+| :--- | :--- | :--- |
+| **NAT Gateway** | Single NAT Gateway (reduces cost by 50%) | 1 NAT Gateway per AZ |
+| **RDS PostgreSQL** | Single-Instance | `multi_az = true` (Auto-failover) |
+| **ECR Image Tags** | `MUTABLE` (allows rapid CI overwrites) | `IMMUTABLE` (protects release integrity)|
+| **Secrets Manager** | Recovery Window = `0 days` (instant wipe) | Recovery Window = `7 days` |
+| **EKS Nodes** | `t3.medium` (Min: 1, Max: 4) | `t3.large` (Min: 2, Max: 6) |
 
-### Credit Card Service
-* This service handles credit card transactions in the microservice application.
-* This service can be accessed from port **[8083]**
+---
 
-### Account Service
-* This service handles account transactions in the microservice application.
-* This service can be accessed from port **[8084]**
+## 🛡️ CI/CD Pipeline & Shift-Left Security
 
-### Invoice Service
-* This service handles invoice transactions in the microservice application.
-* This service can be accessed from port **[8085]**
+The Continuous Integration pipeline is orchestrated by **GitHub Actions**, executing parallel jobs to strictly validate code and container images before they reach the registry.
 
-### Log Service
-* This service handles log transactions in the microservice application.
-* This service can be accessed from port **[8086]**
+### 1. Shift-Left Security Gates
+Before any image is pushed to Amazon ECR, it must pass 4 rigorous security checkpoints:
+1. **Gitleaks (Secret Scanning):** Scans the entire commit history to block hardcoded credentials, API keys, or webhooks.
+2. **SonarCloud (SAST):** Performs static code analysis with JaCoCo integration, enforcing a strict **Quality Gate (>70% Code Coverage)**.
+3. **Container Security (Multi-stage Build):** Dockerfiles are heavily optimized using multi-stage builds. Runtime containers use stripped-down JRE images and are forced to execute under an unprivileged `appuser` (non-root).
+4. **Trivy (Vulnerability Scanner):** Scans the built container layers for CVEs (High/Critical) before authorizing the push to ECR.
 
-## `Database Entity Relationships`
-![database-model-diagram](./documentation/database-model-diagram-dark.png)
+### 2. Deployment Workflows (CI to CD Handoff)
 
-## `Technology Stack`
-- **JDK 21**
-- **Java 21**
-- **Spring Boot**
-- **Spring Core**
-- **Spring Web**
-- **Spring Data**
-- **Spring Rest**
-- **Spring Cloud (Eureka Server, Eureka Discovery Client, Gateway)**
-- **PostgreSQL**
-- **MongoDB**
-- **Redis**
-- **Docker**
-- **Feign Client**
-- **MapStruct**
-- **Maven**
-- **JUnit**
-- **Mockito**
-- **Lombok**
+* **`ci-main.yml` (Staging):** Triggers on pushes to the `main` branch. 
+  * Detects changed microservices.
+  * Runs Unit Tests & Integration Smoke Tests (Docker Compose).
+  * Builds, scans, and pushes images to ECR.
+  * *GitOps Handoff:* Automatically commits the new Image SHA tag directly to the GitOps repository for instant ArgoCD synchronization.
 
-## `Build and Run Project`
-> Requires **JDK 21** to run the project, **Git** to pull from remote repository, and **Docker** to run docker-compose
+* **`ci-production.yml` (Production):** Triggers on PR merges to the `production` branch.
+  * **Image Promotion:** Does *not* rebuild code. It securely promotes (copies) the exact immutable, tested image from the Staging ECR to the Production ECR.
+  * **PR Handoff:** Creates a Pull Request in the GitOps repository. Production deployment only occurs after a human engineer approves and merges this PR.
 
-Follow the steps to build and run the project:
-- Clone the repository from Git
+### 3. Infrastructure Lifecycle Automation
+To support testing without incurring idle cloud costs, automated Bootstrap and Teardown workflows are implemented:
+* **`infra-staging-up.yml`:** Initializes the EKS cluster post-Terraform. It automatically configures `kubeconfig`, installs the AWS Load Balancer Controller, HashiCorp Vault, External Secrets Operator (ESO), and bootstraps ArgoCD via the `cluster-reviver.sh` script.
+* **`infra-staging-down.yml`:** Safely tears down the CD stack before Terraform destruction. It halts ArgoCD syncs, uninstalls controllers, and actively releases AWS Load Balancers to prevent infrastructure deadlock during `terraform destroy`.
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
+* Terraform >= 1.5.0 & HCP Terraform Account
+* AWS CLI configured with appropriate IAM permissions
+* GitHub Secrets configured (e.g., `SONAR_TOKEN`, `OIDC_ROLE_ARN`)
+
+### Provisioning Infrastructure
 ```bash
-  git clone https://github.com/emre-unaldi/Banking-Microservices.git banking-microservices 
+cd terraform/environments/staging
+terraform init
+terraform plan -var-file="staging.tfvars"
+terraform apply -var-file="staging.tfvars"
 ```
-- Open the project file
-```shell
-  cd banking-microservices 
-```
-- Run the project with Docker
-```shell
-  docker-compose up -d && docker-compose down 
-```
-After all services are up and running with `Docker`:
-- `PgAdmin4` interface can be accessed from port **5050**
-- `Redis insight` interface can be accessed from port **5540**
-- `RabbitMQ` interface can be accessed from port **15672**
-- `Mongo Express` interface can be accessed from port **8088**
-> All running services can access dependent graphic interfaces via the web without being dependent on the local environment.
-
-## `Production Promotion Handoff`
-
-Production promotion is split into two phases:
-
-1. Image promotion in CI
-- Merge a PR from `main` into `production`.
-- Workflow `CI Production` promotes changed service images from staging ECR to prod ECR using the merge commit SHA.
-
-2. GitOps values sync and deploy
-- The same workflow calls reusable workflow `Reusable Sync GitOps Values`.
-- It updates changed files in `banking-gitops/environments/prod/*-values.yaml` with:
-  - `image.repository`: `${ECR_REPOSITORY_PREFIX}-prod-{service}` (optionally prefixed with `${ECR_REGISTRY}`)
-  - `image.tag`: promoted commit SHA
-- It then opens an automated PR in the GitOps repository.
-
-Temporary deploy mode (until ArgoCD cutover):
-- After the GitOps PR is merged, run Helm for changed services only.
-- Example command:
-
-```bash
-helm upgrade --install account-prod charts/banking-spring-boot \
-  -n banking-prod \
-  -f environments/prod/account-values.yaml
-```
-
-Required CI secrets/variables:
-- Secret: `GITOPS_REPO_TOKEN` (token that can push and open PRs in the GitOps repository)
-- Update `gitops_repository` in `.github/workflows/ci-production.yml` to your actual GitOps repo (default placeholder: `your-org/banking-gitops`)
-- Optional: in `.github/workflows/r-sync-gitops-values.yml`, adjust defaults for `gitops_base_branch`, `ecr_repository_prefix`, and `image_registry` if needed
-
-## `Service Endpoints`
-
-### `User Service Endpoints`
-| Route                  | HTTP     | Request Body                                                                                                                                                                                | Description 	     |
-|------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| /api/v1/users          | `POST`   | {"username":"john_doe","password":"john1221","email":"john.doe@email.com","firstName":"John","lastName":"Doe","phoneNumber":"05551234567","birthDate":"1990-05-15","gender":"MALE"}         | Create a new user |
-| /api/v1/users          | `PUT`    | {"id":1,"username":"john_doe","password":"john1221","email": "john.doe@email.com","firstName":"John","lastName":"Doe","phoneNumber":"05551234567","birthDate":"1990-05-15","gender":"MALE"} | Update a user     |
-| /api/v1/users/{userId} | `DELETE` | Empty                                                                                                                                                                                       | Delete user by id |
-| /api/v1/users/{userId} | `GET`    | Empty                                                                                                                                                                                       | Get user by id    |
-| /api/v1/users          | `GET`    | Empty                                                                                                                                                                                       | List users        |
-
-### `Bank Service Endpoints`
-| Route                  | HTTP     | Request Body                                                                                                                                                                                                                                | Description 	     |
-|------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------|
-| /api/v1/banks          | `POST`   | {"bankName":"City Bank","bankCode":"CTYB","branchName":"City Bank Main Branch","branchCode":"CTYMB","accountNumber":"98765432","address":"123 Maple Ave, Cityville, USA","email":"info@citybank.com","phoneNumber":"0507 987 65 43"}        | Create a new bank |
-| /api/v1/banks          | `PUT`    | {"id":1,"bankName":"City Bank","bankCode":"CTYB","branchName":"City Bank Main Branch","branchCode":"CTYMB","accountNumber":"98765432","address":"123 Maple Ave, Cityville, USA","email":"info@citybank.com","phoneNumber":"0507 987 65 43"} | Update a bank     |
-| /api/v1/banks/{bankId} | `DELETE` | Empty                                                                                                                                                                                                                                       | Delete bank by id |
-| /api/v1/banks/{bankId} | `GET`    | Empty                                                                                                                                                                                                                                       | Get bank by id    |
-| /api/v1/banks          | `GET`    | Empty                                                                                                                                                                                                                                       | List banks        |
-
-### `Credit Card Service Endpoints`
-| Route                              | HTTP     | Request Body                                                                                                                                       | Description 	                   |
-|------------------------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------|
-| /api/v1/creditCards                | `POST`   | {"cardNumber":"1234567890123456","userId":5,"expirationDate":"2025-12-15","cvv":"789","creditLimit":3000.00,"debtAmount":200.00,"bankId":6}        | Create a new credit card        |
-| /api/v1/creditCards                | `PUT`    | {"id":1,"cardNumber":"1234567890123456","userId":5,"expirationDate":"2025-12-15","cvv":"789","creditLimit":3000.00,"debtAmount":200.00,"bankId":6} | Update a credit card            |
-| /api/v1/creditCards/{creditCardId} | `DELETE` | Empty                                                                                                                                              | Delete credit card by id        |
-| /api/v1/creditCards/{creditCardId} | `GET`    | Empty                                                                                                                                              | Get credit card by id           |
-| /api/v1/creditCards                | `GET`    | Empty                                                                                                                                              | List credit cards               |
-| /api/v1/creditCards/users/{userId} | `GET`    | Empty                                                                                                                                              | Get credit card user by user id |
-| /api/v1/creditCards/banks/{bankId} | `GET`    | Empty                                                                                                                                              | Get credit card bank by bank id |
-
-### `Account Service Endpoints`
-| Route                           | HTTP     | Request Body	                                                                                                                   | Description 	               |
-|---------------------------------|----------|---------------------------------------------------------------------------------------------------------------------------------|-----------------------------|
-| /api/v1/accounts                | `POST`   | {"accountNumber":"304958349584","userId":3,"balance":5000.00,"accountType":"CREDIT","accountStatus":"ACTIVE","bankId":7}        | Create a new account        |
-| /api/v1/accounts                | `PUT`    | {"id":1,"accountNumber":"304958349584","userId":3,"balance":5000.00,"accountType":"CREDIT","accountStatus":"ACTIVE","bankId":7} | Update a account            |
-| /api/v1/accounts/{accountId}    | `DELETE` | Empty                                                                                                                           | Delete account by id        |
-| /api/v1/accounts/{accountId}    | `GET`    | Empty                                                                                                                           | Get account by id           |
-| /api/v1/accounts                | `GET`    | Empty                                                                                                                           | List accounts               |
-| /api/v1/accounts/users/{userId} | `GET`    | Empty                                                                                                                           | Get account user by user id |
-| /api/v1/accounts/banks/{bankId} | `GET`    | Empty                                                                                                                           | Get account bank by bank id |
-
-### `Invoice Service Endpoints`
-| Route                           | HTTP     | Request Body                                                                                                                                   | Description 	               |
-|---------------------------------|----------|------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------|
-| /api/v1/invoices                | `POST`   | {"invoiceNumber":"INV-2024-038","userId":2,"amount":180.25,"invoiceDate":"2023-07-01","dueDate":"2024-02-01","paymentStatus":"PENDING"}        | Create a new invoice        |
-| /api/v1/invoices                | `PUT`    | {"id":1,"invoiceNumber":"INV-2024-038","userId":2,"amount":180.25,"invoiceDate":"2023-07-01","dueDate":"2024-02-01","paymentStatus":"PENDING"} | Update a invoice            |
-| /api/v1/invoices/{invoiceId}    | `DELETE` | Empty                                                                                                                                          | Delete invoice by id        |
-| /api/v1/invoices/{invoiceId}    | `GET`    | Empty                                                                                                                                          | Get invoice by id           |
-| /api/v1/invoices                | `GET`    | Empty                                                                                                                                          | List invoices               |
-| /api/v1/invoices/users/{userId} | `GET`    | Empty                                                                                                                                          | Get invoice user by user id |
-
-### `Log Service Endpoints`
-| Route                | HTTP     | Request Body	                                                                                                                                                                                                                                | Description 	    |
-|----------------------|----------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------|
-| /api/v1/logs         | `POST`   | {"serviceName":"account-service","operationType":"GET","logType":"INFO","message":"Accounts in the database are listed","requestPath":"/api/v1/accounts","timestamp":"2024-04-25T12:00:00","exception":null}                                 | Create a new log |
-| /api/v1/logs         | `PUT`    | {"id":"661c2ba9278f996c640cd220","serviceName":"account-service","operationType":"GET","logType":"INFO","message":"Accounts in the database are listed","requestPath":"/api/v1/accounts","timestamp":"2024-04-25T12:00:00","exception":null} | Update a log     |
-| /api/v1/logs/{logId} | `DELETE` | Empty                                                                                                                                                                                                                                        | Delete log by id |
-| /api/v1/logs/{logId} | `GET`    | Empty                                                                                                                                                                                                                                        | Get log by id    |
-| /api/v1/logs         | `GET`    | Empty                                                                                                                                                                                                                                        | List logs        |
-
+After provisioning, trigger the infra-staging-up.yml GitHub Action manually to bootstrap the cluster controllers and GitOps engine.
